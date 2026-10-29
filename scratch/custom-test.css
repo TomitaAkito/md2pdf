@@ -1,0 +1,27 @@
+/* Generated from PPTX */
+:root {
+  --color-primary: #0F5E5A;
+}
+@page {
+  size: A4 portrait;
+  margin: 20mm;
+  @bottom-center {
+    content: "- " counter(page) " -";
+    font-size: 9pt;
+    color: #64748b;
+  }
+}
+@page:first {
+  margin: 0;
+  @bottom-center { content: none; }
+}
+h1 {
+  color: #0F5E5A;
+  border-bottom: 2px solid #0F5E5A;
+  padding-bottom: 0.3em;
+  break-before: page;
+}
+h2 {
+  border-left: 4px solid #0F5E5A;
+  padding-left: 0.6em;
+}

@@ -1,0 +1,178 @@
+<USER_REQUEST>
+Pfpdf GUIラッパー＆テンプレートビルダー 要件定義・実装仕様書
+
+1. プロジェクト概要
+
+Preferred Networks（PFN）が公開しているCLIツール pfpdf（Vivliostyle / Chromiumベース）を内部エンジンとして利用する、「GUIラッパー」としてのデスクトップアプリケーションを開発する。
+
+MarkdownからPDFを直感的に生成できるジェネレーター機能に加え、PowerPointのようにマウス操作でPDFのテンプレート（表紙レイアウトや本文スタイル）を自作できる「テンプレートビルダー機能」を実装する。
+
+2. システム構成・技術スタック
+
+本アプリは pfpdf をラップするElectronアプリとして構築する。
+
+プラットフォーム: Electron (クロスプラットフォームデスクトップアプリ)
+
+フロントエンド: React, TypeScript, Tailwind CSS (UI構築)
+
+状態管理: Zustand または React Context (テンプレートエディタの状態保持)
+
+ドラッグ＆ドロップ: @hello-pangea/dnd または react-rnd (キャンバス上の要素配置用)
+
+バックエンド (Electron Main Process): Node.js。pfpdf のソースコードは再実装・模倣せず、npm install pfpdf にてパッケージとして導入し、メインプロセスから呼び出す。
+
+3. アプリケーションの2つの顔（コアモード）
+
+用途に応じて2つのモードを切り替えて使用する。
+
+3.1. ジェネレーターモード（PDF生成機能）
+
+Markdownファイルを読み込み、テンプレートを適用してPDFを出力する日常利用モード。
+
+入力: Markdownファイル（ドラッグ＆ドロップ対応）。
+
+設定UI: Front Matterの主要項目（title, author, date 等）をGUIフォームで入力・上書き可能にする。
+
+テンプレート選択: 公式テンプレート（academic, pfn 等）および、本アプリで自作したテンプレートを一覧から選択。
+
+プレビュー＆出力: 適用結果のプレビュー表示、および pfpdf エンジンを用いたPDF書き出し処理。
+
+3.2. テンプレートビルダーモード（GUI編集機能）
+
+CSSの知識不要で、PowerPointのように要素を配置してオリジナルテンプレートを作成するモード。
+
+キャンバス配置（表紙・ヘッダー・フッター）: タイトル、著者、ロゴ画像などのテキスト/画像ボックスをドラッグ＆ドロップで自由配置（X/Y座標、幅/高さ）し、フォントサイズや色を設定。
+
+スタイル設定（本文）: 用紙サイズ（A4/B5等）、余白調整、見出し（H1〜H6）、段落、コードブロックなどの装飾をプロパティパネルで設定。
+
+出力（保存）: 編集状態を専用の「JSONデータ」として保存し、同時に pfpdf が読み込める「CSSファイル（Vivliostyle仕様）」を自動生成する。
+
+4. データ構造と互換性の制約事項（【重要】実装AIへの指示）
+
+本システムにおけるテンプレートのデータフローには明確な制約がある。実装時に混同しないこと。
+
+制約1: 既存の pfpdf 公式テンプレートや、生のCSSで書かれたテンプレートはジェネレーターモードでのみ使用可能である。
+
+制約2: テンプレートビルダー（GUIエディタ）で編集できるのは、本アプリ内で新規作成し、内部構造としてJSONデータを持つテンプレートのみである。複雑なCSSからGUI用のJSONへのリバースエンジニアリング（逆変換）は実装しない。
+
+5. GUI ⇔ CSS 変換ロジック仕様
+
+テンプレートビルダーで作成したJSONデータを、Vivliostyle（pfpdf）向けCSSに変換するジェネレーターを実装すること。
+
+【データ構造のモック（JSON）】
+
+{
+
+"id": "custom-template-01",
+
+"name": "My Custom Report",
+
+"pageSettings": {
+
+"size": "A4",
+
+"margin": { "top": "20mm", "bottom": "20mm", "left": "25mm", "right": "25mm" }
+
+},
+
+"coverElements": [
+
+{ "type": "title", "x": 50, "y": 100, "width": 400, "fontSize": "32pt", "color": "#333333" }
+
+],
+
+"elementStyles": {
+
+"h1": { "borderBottom": "2px solid #0055A4", "color": "#0055A4" }
+
+}
+
+}
+
+【変換先のCSS構造（Vivliostyle仕様）】
+
+/* 用紙設定 /
+
+@page {
+
+size: A4;
+
+margin: 20mm 25mm 20mm 25mm;
+
+}
+
+/ 表紙の絶対配置 (JSONのcoverElementsをマッピング) /
+
+.cover-title {
+
+position: absolute;
+
+top: 100px;
+
+left: 50px;
+
+width: 400px;
+
+font-size: 32pt;
+
+color: #333333;
+
+}
+
+/ 本文スタイル (JSONのelementStylesをマッピング) */
+
+h1 {
+
+border-bottom: 2px solid #0055A4;
+
+color: #0055A4;
+
+}
+
+6. pfpdf ラッパーとしての実行方式
+
+実行手段: ElectronのMainプロセスから、Node.jsの child_process（spawn または exec）を用いて、内部インストールした pfpdf コマンド（npx pfpdf ... 相当）をCLIとして叩く、またはNodeAPIとしてモジュール実行する。
+
+Chromiumの扱い: pfpdf は内部でChromiumをダウンロード・実行するため、Electronアプリのパッケージング時（本番環境）におけるChromiumのパス解決や初回ダウンロード時のプログレス処理（可能であれば）を考慮した設計とすること。
+
+7. 開発の進め方（実装フェーズ）
+
+実装AIは、以下のステップに沿って段階的にファイルとコードを出力してください。
+
+Phase 1: 環境構築とコア連携
+
+Electron + Reactのボイラープレートの構築。
+
+ElectronのMainプロセスから pfpdf を呼び出し、ダミーの .md をPDF化できるIPC通信とラッパーロジックの確立。
+
+Phase 2: ジェネレーターモードUI実装
+
+Markdownファイルの読み込みUI、フォームUI、およびPDF出力ボタンの実装。
+
+Phase 3: テンプレートビルダー基盤実装
+
+キャンバスUI（ドラッグ＆ドロップ配置）とプロパティパネルの実装。
+
+編集状態（JSON）のローカル保存機能の実装。
+
+Phase 4: CSSトランスパイラの実装
+
+Phase 3で保存したJSONをVivliostyle仕様のCSS文字列に変換し、ファイルとして書き出すロジックの実装。
+
+実装AIへの初回指示:
+
+上記の要件定義を読み込み、全体像と「GUIラッパーとしての制約」を理解したら、「要件を理解しました」と回答し、Phase 1（Electron + React環境のセットアップ手順、およびMainプロセスで pfpdf を呼び出すためのラッパー機能・IPCハンドラーの設計）の具体的なコード出力を開始してください。 
+
+＝＝＝
+これのフェーズ１ができているかを検証してください
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-29T19:40:49+09:00.
+
+The user's current state is as follows:
+Active Document: c:\Users\punch\zisaku\pfpdf-studio\src\renderer\src\App.tsx (LANGUAGE_TSX)
+Cursor is on line: 23
+Other open documents:
+- c:\Users\punch\zisaku\pfpdf-studio\src\renderer\src\App.tsx (LANGUAGE_TSX)
+- c:\Users\punch\zisaku\pfpdf-studio\electron.vite.config.ts (LANGUAGE_TYPESCRIPT)
+</ADDITIONAL_METADATA>
