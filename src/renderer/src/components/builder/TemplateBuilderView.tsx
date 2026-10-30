@@ -217,25 +217,25 @@ export default function TemplateBuilderView(): React.JSX.Element {
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className="flex-1 flex flex-col h-full overflow-hidden bg-slate-100 select-none relative"
+      className="flex-1 flex flex-col h-full overflow-hidden bg-[#f8f9fa] select-none relative"
     >
       {/* PPTX ドラッグ時の全画面オーバーレイ */}
       {isDraggingPptx && (
-        <div className="absolute inset-0 bg-blue-600/90 backdrop-blur-sm z-50 flex flex-col items-center justify-center text-white pointer-events-none animate-in fade-in duration-150">
-          <FileSpreadsheet className="w-20 h-20 mb-4 animate-bounce" />
-          <h2 className="text-2xl font-bold mb-1">PowerPoint (.pptx) をドロップ</h2>
-          <p className="text-sm text-blue-100">
+        <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-xs z-50 flex flex-col items-center justify-center text-white pointer-events-none animate-in fade-in duration-150">
+          <FileSpreadsheet className="w-12 h-12 mb-3" />
+          <h2 className="text-base font-semibold mb-1">PowerPoint (.pptx) をドロップ</h2>
+          <p className="text-xs text-slate-300">
             スライドから表紙・目次・本文のテキストボックスや色情報を自動解析します
           </p>
         </div>
       )}
 
       {/* 上部ツールバー */}
-      <div className="h-14 bg-white border-b border-slate-200 px-6 flex items-center justify-between shadow-2xs shrink-0 z-30">
+      <div className="h-12 bg-white border-b border-slate-200/90 px-6 flex items-center justify-between shadow-2xs shrink-0 z-30">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
-            <FileSpreadsheet className="w-5 h-5 text-orange-600" />
-            <span className="font-bold text-slate-800 text-sm">PPTX テンプレート変換</span>
+            <FileSpreadsheet className="w-4 h-4 text-slate-700" />
+            <span className="font-semibold text-slate-900 text-xs">PPTX テンプレート変換</span>
           </div>
 
           <span className="text-slate-300">|</span>
@@ -246,13 +246,13 @@ export default function TemplateBuilderView(): React.JSX.Element {
             value={currentTemplate.name}
             onChange={(e) => updateTemplateMeta(e.target.value)}
             placeholder="テンプレート名"
-            className="text-xs font-bold text-slate-800 border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-lg px-2.5 py-1 focus:outline-none transition w-48 bg-slate-50"
+            className="text-xs text-slate-800 border border-slate-200 hover:border-slate-300 focus:border-slate-800 focus:ring-1 focus:ring-slate-800 rounded-lg px-2.5 py-1 focus:outline-none transition w-44 bg-slate-50/50"
           />
 
           {currentTemplate.sourcePptx && (
-            <span className="text-[10px] bg-orange-50 text-orange-800 font-bold px-2.5 py-1 rounded-lg border border-orange-200 flex items-center gap-1">
-              <span>元ファイル:</span>
-              <span className="font-mono">{currentTemplate.sourcePptx}</span>
+            <span className="text-[10px] bg-slate-100 text-slate-700 font-medium px-2 py-0.5 rounded-md border border-slate-200 flex items-center gap-1 font-mono">
+              <span className="text-slate-400">元:</span>
+              <span className="truncate max-w-[120px]">{currentTemplate.sourcePptx}</span>
             </span>
           )}
 
@@ -263,7 +263,7 @@ export default function TemplateBuilderView(): React.JSX.Element {
               <select
                 value={currentTemplate.id}
                 onChange={handleSelectTemplate}
-                className="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer max-w-[140px] truncate"
+                className="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 focus:outline-none focus:border-slate-800 cursor-pointer max-w-[140px] truncate"
               >
                 {savedTemplates.map((t) => (
                   <option key={t.id} value={t.id}>
@@ -277,14 +277,14 @@ export default function TemplateBuilderView(): React.JSX.Element {
 
         <div className="flex items-center gap-2">
           {saveSuccessMsg && (
-            <span className="text-xs text-emerald-600 font-bold flex items-center gap-1 animate-in fade-in">
-              <CheckCircle2 className="w-4 h-4" />
+            <span className="text-xs text-emerald-600 font-medium flex items-center gap-1 animate-in fade-in">
+              <CheckCircle2 className="w-3.5 h-3.5" />
               {saveSuccessMsg}
             </span>
           )}
           {saveErrorMsg && (
-            <span className="text-xs text-red-600 font-bold flex items-center gap-1">
-              <AlertCircle className="w-4 h-4" />
+            <span className="text-xs text-red-600 font-medium flex items-center gap-1">
+              <AlertCircle className="w-3.5 h-3.5" />
               {saveErrorMsg}
             </span>
           )}
@@ -293,10 +293,10 @@ export default function TemplateBuilderView(): React.JSX.Element {
           <button
             type="button"
             onClick={() => setShowSampleModal(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold border border-slate-200 text-xs transition"
+            className="flex items-center gap-1.5 px-2.5 py-1 bg-white hover:bg-slate-50 text-slate-700 rounded-lg border border-slate-200 text-xs font-medium transition cursor-pointer"
           >
             <Download className="w-3.5 h-3.5 text-slate-500" />
-            サンプルPPTX保存
+            サンプル取得
           </button>
 
           {/* PPTX ファイル読み込み */}
@@ -304,14 +304,14 @@ export default function TemplateBuilderView(): React.JSX.Element {
             type="button"
             onClick={handleSelectPptx}
             disabled={isParsingPptx}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-bold shadow-xs transition text-xs disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-medium shadow-2xs transition text-xs disabled:opacity-50 cursor-pointer"
           >
             {isParsingPptx ? (
               <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
             ) : (
               <Upload className="w-3.5 h-3.5" />
             )}
-            PPTX を読み込む
+            PPTX を選択
           </button>
 
           {/* テンプレート登録ボタン */}
@@ -320,14 +320,14 @@ export default function TemplateBuilderView(): React.JSX.Element {
               type="button"
               onClick={handleSave}
               disabled={isSaving}
-              className="flex items-center gap-1.5 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition disabled:opacity-50"
+              className="flex items-center gap-1.5 px-3 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-medium shadow-2xs transition disabled:opacity-50 cursor-pointer"
             >
               {isSaving ? (
                 <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
               ) : (
                 <Check className="w-3.5 h-3.5" />
               )}
-              この設定でテンプレートを登録
+              テンプレートを保存
             </button>
           )}
         </div>
@@ -339,44 +339,44 @@ export default function TemplateBuilderView(): React.JSX.Element {
         /* 状態 A: PPTX 未読み込み（初期ドロップゾーン画面） */
         /* ======================================================== */
         <div className="flex-1 flex flex-col items-center justify-center p-8 overflow-y-auto">
-          <div className="max-w-xl w-full text-center space-y-6">
+          <div className="max-w-md w-full text-center space-y-4">
             <div
               onClick={handleSelectPptx}
-              className="p-12 border-2 border-dashed border-slate-300 hover:border-orange-500 bg-white hover:bg-orange-50/20 rounded-3xl cursor-pointer transition-all shadow-sm group flex flex-col items-center justify-center"
+              className="p-10 border border-dashed border-slate-300 hover:border-slate-800 bg-white rounded-xl cursor-pointer transition-colors shadow-2xs group flex flex-col items-center justify-center"
             >
-              <div className="w-20 h-20 rounded-2xl bg-orange-100 text-orange-600 flex items-center justify-center mb-4 group-hover:scale-105 transition-transform">
-                <FileSpreadsheet className="w-10 h-10" />
+              <div className="w-12 h-12 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center mb-3 group-hover:text-slate-900 transition-colors">
+                <FileSpreadsheet className="w-6 h-6 stroke-[1.75]" />
               </div>
-              <h2 className="text-lg font-bold text-slate-800 mb-1 group-hover:text-orange-700">
-                PowerPoint (.pptx) をドロップ
+              <h2 className="text-sm font-semibold text-slate-900 mb-1">
+                PowerPoint (.pptx) をドラッグ＆ドロップ
               </h2>
-              <p className="text-xs text-slate-500 mb-4 max-w-sm">
-                またはクリックしてファイルを選択してください。
-                スライド1枚目の表紙、色、フォント、各テキストボックスの役割を自動解析します。
+              <p className="text-[11px] text-slate-400 mb-4 max-w-xs leading-relaxed">
+                またはクリックしてファイルを選択。
+                表紙・目次・本文のテキストボックスや色情報を自動解析します。
               </p>
-              <div className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs rounded-xl shadow-xs flex items-center gap-2">
+              <div className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-medium text-xs rounded-lg shadow-2xs flex items-center gap-1.5">
                 <Upload className="w-3.5 h-3.5" />
                 ファイルを選択して解析
               </div>
             </div>
 
             {/* サンプルファイル案内 */}
-            <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-2xs flex items-center justify-between text-left">
+            <div className="bg-white rounded-xl p-3.5 border border-slate-200/80 shadow-2xs flex items-center justify-between text-left">
               <div>
-                <h4 className="text-xs font-bold text-slate-800 mb-0.5">
-                  PowerPointファイルをお持ちでない場合
+                <h4 className="text-xs font-semibold text-slate-800 mb-0.5">
+                  ひな形スライドをお探しの場合
                 </h4>
-                <p className="text-[11px] text-slate-500">
-                  A4縦・洗練デザインのひな形スライドをダウンロードして、文字や色を変えてお使いいただけます。
+                <p className="text-[11px] text-slate-400">
+                  A4縦デザインのPowerPointテンプレートをダウンロードできます。
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setShowSampleModal(true)}
-                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 shrink-0 transition flex items-center gap-1.5"
+                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-xs rounded-lg border border-slate-200 shrink-0 transition flex items-center gap-1.5 cursor-pointer"
               >
                 <Download className="w-3.5 h-3.5 text-slate-500" />
-                サンプルを取得
+                サンプル取得
               </button>
             </div>
           </div>

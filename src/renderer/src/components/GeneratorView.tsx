@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react'
 import {
-  UploadCloud,
+  Upload,
   FileText,
   FileCode,
   FolderOpen,
-  Sparkles,
+  FileDown,
   ExternalLink,
   Folder,
   Terminal,
@@ -25,14 +25,19 @@ import {
   TemplateInfo,
   PdfGenerateOptions,
   PdfGenerateResult,
-  PfpdfProgressEvent
+  PfpdfProgressEvent,
+  CustomTemplateData
 } from '../../../shared/types'
 
-// 各テンプレートのフォーマット・デザイン仕様定義
+// 各テンプレートのフォーマット・デザイン仕様定義（pfpdf公式CSS/HTML準拠）
 interface TemplateFormatDetail {
   id: string
   name: string
   color: string
+  paperBg: string
+  coverBg: string
+  coverTextColor: string
+  fontFamily: 'sans' | 'serif'
   layoutName: string
   fontName: string
   coverType: 'standalone' | 'integrated' | 'none'
@@ -58,172 +63,202 @@ const TEMPLATE_DETAILS: Record<string, TemplateFormatDetail> = {
   pfn: {
     id: 'pfn',
     name: 'PFN Corporate',
-    color: '#263c7f',
+    color: '#19438f',
+    paperBg: '#ffffff',
+    coverBg: 'linear-gradient(135deg, #111b64 0%, #19438f 52%, #1b75b4 100%)',
+    coverTextColor: '#ffffff',
+    fontFamily: 'sans',
     layoutName: '公式コーポレート・企業報告書',
     fontName: 'Noto Sans JP (モダンサンセリフ)',
     coverType: 'standalone',
-    coverTypeName: '独立表紙（トップ濃紺帯）',
-    coverFeature: '上部ネイビー帯 ＋ 章連動ランニングヘッダー',
-    runningHeader: '奇数・偶数ページ章タイトル連動ヘッダー',
+    coverTypeName: '独立表紙（全面ディープブルーグラデーション）',
+    coverFeature: '全面ブルーグラデーション ＋ 白文字中央タイトル ＋ 右上赤CONFIDENTIAL',
+    runningHeader: '章タイトル連動ヘッダー',
     pageNumberPos: '下部中央 (- 1 -)',
-    h1Style: { color: '#263c7f', borderBottom: '2.5px solid #263c7f' },
-    h2Style: { color: '#1f2937', borderLeft: '4px solid #263c7f' },
-    tableHeaderBg: '#263c7f',
-    features: ['コーポレート帯', '章連動ヘッダー', 'ノンブル中央', '洗練タイポグラフィ'],
+    h1Style: { color: '#19438f', borderBottom: '2.5px solid #19438f' },
+    h2Style: { color: '#19438f', borderLeft: '4px solid #19438f' },
+    tableHeaderBg: '#19438f',
+    features: ['濃紺グラデーション表紙', '白文字タイポグラフィ', 'CONFIDENTIALバッジ', '公式コーポレート'],
     badge: '公式コーポレート',
     bestFor: '企業報告書・コーポレート技術文書・公式仕様書',
     thumbnail: {
-      hasTopBar: true,
-      hasCenterTitle: false,
-      h1BarColor: '#263c7f',
-      accentColor: '#263c7f'
+      hasTopBar: false,
+      hasCenterTitle: true,
+      h1BarColor: '#19438f',
+      accentColor: '#19438f'
     }
   },
   academic: {
     id: 'academic',
     name: 'Academic',
-    color: '#831843',
+    color: '#243f5b',
+    paperBg: '#ffffff',
+    coverBg: '#ffffff',
+    coverTextColor: '#20252b',
+    fontFamily: 'serif',
     layoutName: '学術論文・テクニカルレポート',
-    fontName: '明朝・フォーマルセリフ混植',
-    coverType: 'integrated',
-    coverTypeName: '本文一体型（先頭に表題・即本文）',
-    coverFeature: '中央配置タイトル ＋ 文献引用・数式最適化',
+    fontName: 'Noto Serif JP (学術・明朝セリフ体)',
+    coverType: 'standalone',
+    coverTypeName: '独立表紙（ジャーナル二重線マストヘッド）',
+    coverFeature: '上部二重線マストヘッド ＋ 重厚なセリフ体タイトル',
     runningHeader: '上部細線 ＋ 論文タイトル',
     pageNumberPos: '下部中央',
-    h1Style: { color: '#831843', borderBottom: '1.5px solid #831843' },
-    h2Style: { color: '#374151', borderLeft: '3px solid #831843' },
-    tableHeaderBg: '#831843',
-    features: ['論文スタイル', '2段組風組版', '数式最適化', '文献引用'],
+    h1Style: { color: '#243f5b', borderBottom: '1px solid #243f5b' },
+    h2Style: { color: '#243f5b' },
+    tableHeaderBg: '#243f5b',
+    features: ['二重線マストヘッド', '学術明朝・セリフ体', '独立表紙', '数式・論文最適化'],
     badge: '論文・研究',
     bestFor: '学術論文・査読用レポート・大学課題・研究発表',
     thumbnail: {
-      hasTopBar: false,
-      hasCenterTitle: true,
-      h1BarColor: '#831843',
-      accentColor: '#831843'
+      hasTopBar: true,
+      hasCenterTitle: false,
+      h1BarColor: '#243f5b',
+      accentColor: '#243f5b'
     }
   },
   technical: {
     id: 'technical',
     name: 'Technical',
-    color: '#0f5e5a',
+    color: '#086f83',
+    paperBg: '#ffffff',
+    coverBg: '#ffffff',
+    coverTextColor: '#17202a',
+    fontFamily: 'sans',
     layoutName: '技術仕様書・APIドキュメント',
-    fontName: '等幅コード重視 ＋ サンセリフ',
+    fontName: 'Noto Sans JP ＋ 等幅コード重視',
     coverType: 'standalone',
-    coverTypeName: '独立表紙（ダーク調・左グリーンライン）',
-    coverFeature: '高密度レイアウト ＋ ダークコードブロック',
+    coverTypeName: '独立表紙（左端深青緑縦バー）',
+    coverFeature: '左端5mmバー ＋ 等幅シリーズ名 ＋ 高密度コード',
     runningHeader: 'APIセクション名連動ヘッダー',
     pageNumberPos: '下部右寄せ',
-    h1Style: { color: '#0f5e5a', borderBottom: '2px solid #0f5e5a' },
-    h2Style: { color: '#0f5e5a', borderLeft: '4px solid #0f5e5a' },
-    tableHeaderBg: '#0f5e5a',
-    features: ['コードハイライト重視', '高密度レイアウト', '技術書向け', '左ラインH2'],
+    h1Style: { color: '#086f83', borderBottom: '2px solid #086f83' },
+    h2Style: { color: '#064e5d', borderLeft: '3.5px solid #086f83' },
+    tableHeaderBg: '#086f83',
+    features: ['左端5mmバー', 'コードブロック重視', '高密度レイアウト', '右寄せノンブル'],
     badge: '技術仕様書',
     bestFor: 'APIリファレンス・システム設計書・エンジニア向け手引き',
     thumbnail: {
-      hasTopBar: true,
+      hasTopBar: false,
       hasCenterTitle: false,
-      h1BarColor: '#0f5e5a',
-      accentColor: '#10b981'
+      h1BarColor: '#086f83',
+      accentColor: '#086f83'
     }
   },
   book: {
     id: 'book',
     name: 'Book',
-    color: '#1e293b',
+    color: '#5b312e',
+    paperBg: '#fdfbf6',
+    coverBg: '#fdfbf6',
+    coverTextColor: '#292521',
+    fontFamily: 'serif',
     layoutName: '書籍・長文マニュアル',
-    fontName: '書籍用長文フォント (ゆったり行間)',
+    fontName: 'Noto Serif JP (書籍明朝・ゆったり行間)',
     coverType: 'standalone',
-    coverTypeName: '独立書籍章扉（章扉H1改ページ）',
-    coverFeature: '章扉・H1での改ページ ＋ 見開きノンブル',
+    coverTypeName: '独立表紙（アイボリー紙＆二重枠フレーム）',
+    coverFeature: 'クリーム紙 ＋ エレガント二重枠 ＋ 中央揃えセリフ体',
     runningHeader: '見開き連動（左: 書籍名、右: 章名）',
     pageNumberPos: '見開き配置（偶数左下 / 奇数右下）',
-    h1Style: { color: '#1e293b', borderBottom: '1px solid #94a3b8' },
-    h2Style: { color: '#334155', borderLeft: '3px solid #64748b' },
-    tableHeaderBg: '#334155',
-    features: ['章扉改ページ', '見開きノンブル', '書籍組版', '長文最適化'],
+    h1Style: { color: '#292521', borderBottom: '1px solid #b8aea0' },
+    h2Style: { color: '#5b312e' },
+    tableHeaderBg: '#5b312e',
+    features: ['クリーム紙色', 'クラシック二重枠', '書籍明朝セリフ体', '長文ゆったり行間'],
     badge: '書籍・長文',
     bestFor: '技術同人誌・操作マニュアル・解説書・長編ドキュメント',
     thumbnail: {
       hasTopBar: false,
       hasCenterTitle: true,
-      h1BarColor: '#1e293b',
-      accentColor: '#64748b'
+      h1BarColor: '#5b312e',
+      accentColor: '#b8aea0'
     }
   },
   compact: {
     id: 'compact',
     name: 'Compact',
-    color: '#334155',
+    color: '#343a40',
+    paperBg: '#ffffff',
+    coverBg: '#ffffff',
+    coverTextColor: '#202428',
+    fontFamily: 'sans',
     layoutName: '省スペース・短文サマリー',
-    fontName: '高可読コンパクトフォント',
+    fontName: 'Noto Sans JP (高密度コンパクト)',
     coverType: 'integrated',
-    coverTypeName: '表紙なし（余白最小限・1〜2枚凝縮）',
-    coverFeature: '余白を抑えた高密度（1〜2枚に凝縮）',
+    coverTypeName: '表紙なし直結（上部ヘッダーバー）',
+    coverFeature: '独立表紙なし ＋ 上部仕切りバー ＋ 本文即開始',
     runningHeader: 'なし（本文領域を最大化）',
     pageNumberPos: '下部右寄せ',
-    h1Style: { color: '#334155', borderBottom: '1.5px solid #cbd5e1' },
-    h2Style: { color: '#475569', borderLeft: '3px solid #94a3b8' },
-    tableHeaderBg: '#475569',
-    features: ['省スペース', '最小限の余白', '表紙省略対応', 'レジュメ向け'],
+    h1Style: { color: '#343a40', borderBottom: '1.5px solid #aeb4b9' },
+    h2Style: { color: '#343a40' },
+    tableHeaderBg: '#343a40',
+    features: ['表紙なし直結', '最小限の余白', '要約サマリーバー', 'ワンペーパー向け'],
     badge: '省スペース',
     bestFor: 'ワンペーパー報告・会議サマリー・要約レジュメ',
     thumbnail: {
       hasTopBar: false,
       hasCenterTitle: false,
-      h1BarColor: '#334155',
-      accentColor: '#94a3b8'
+      h1BarColor: '#343a40',
+      accentColor: '#343a40'
     }
   },
   notebook: {
     id: 'notebook',
     name: 'Notebook',
-    color: '#4f46e5',
+    color: '#287d78',
+    paperBg: '#fffdf8',
+    coverBg: '#fffdf8',
+    coverTextColor: '#293b40',
+    fontFamily: 'sans',
     layoutName: 'カジュアル・ノートブック風',
-    fontName: '親しみやすいサンセリフ',
+    fontName: '親しみやすいサンセリフ (アイボリー紙)',
     coverType: 'standalone',
-    coverTypeName: '独立表紙（方眼・手帳風）',
-    coverFeature: 'グリッド方眼風 ＋ 手帳スタイル',
-    runningHeader: '親しみやすいメモ風ヘッダー',
+    coverTypeName: '独立表紙（幾何学シェイプ ＆ ティール枠）',
+    coverFeature: '右上ティール＆左下コーラル幾何学 ＋ 手帳風枠線',
+    runningHeader: 'メモ風ヘッダー',
     pageNumberPos: '下部中央',
-    h1Style: { color: '#4f46e5', borderBottom: '2px dashed #4f46e5' },
-    h2Style: { color: '#312e81', borderLeft: '4px solid #818cf8' },
-    tableHeaderBg: '#4f46e5',
-    features: ['手帳・ノート風', 'グリッド背景', '親しみやすい配色', 'メモ・議事録'],
+    h1Style: { color: '#185b58', borderBottom: '2px dashed #287d78' },
+    h2Style: { color: '#185b58', borderLeft: '4px solid #e66b58' },
+    tableHeaderBg: '#287d78',
+    features: ['斜め幾何学シェイプ', 'ティール＆コーラル', 'アイボリー紙', '手帳・ノート風'],
     badge: 'カジュアル',
     bestFor: '議事録・社内勉強会資料・アイデアメモ・企画書',
     thumbnail: {
       hasTopBar: true,
       hasCenterTitle: false,
-      h1BarColor: '#4f46e5',
-      accentColor: '#818cf8'
+      h1BarColor: '#287d78',
+      accentColor: '#e66b58'
     }
   },
   default: {
     id: 'default',
     name: 'Default',
-    color: '#0f5e5a',
+    color: '#46515c',
+    paperBg: '#ffffff',
+    coverBg: '#ffffff',
+    coverTextColor: '#222222',
+    fontFamily: 'sans',
     layoutName: '標準レポート・ニュートラル',
     fontName: '標準ゴシック (Noto Sans JP)',
     coverType: 'standalone',
-    coverTypeName: '独立標準表紙（中央配置）',
-    coverFeature: '端正なタイトル ＋ 下部著者・日付',
+    coverTypeName: '独立標準表紙（大見出し左寄せ）',
+    coverFeature: '大見出しタイトル ＋ 左寄せメタデータ ＋ 汎用標準',
     runningHeader: 'ドキュメントタイトル',
     pageNumberPos: '下部中央',
-    h1Style: { color: '#0f5e5a', borderBottom: '2px solid #0f5e5a' },
-    h2Style: { color: '#1f2937', borderLeft: '4px solid #0f5e5a' },
-    tableHeaderBg: '#0f5e5a',
-    features: ['標準ニュートラル', '汎用レポート', 'ノンブル中央', 'どんな文書にも適合'],
+    h1Style: { color: '#46515c', borderBottom: '1.5px solid #46515c' },
+    h2Style: { color: '#46515c' },
+    tableHeaderBg: '#46515c',
+    features: ['標準ニュートラル', '大見出し左寄せ', 'ノンブル中央', 'どんな文書にも適合'],
     badge: '標準汎用',
     bestFor: 'あらゆる一般的な報告書・提案書・日常ドキュメント',
     thumbnail: {
       hasTopBar: false,
-      hasCenterTitle: true,
-      h1BarColor: '#0f5e5a',
-      accentColor: '#0f5e5a'
+      hasCenterTitle: false,
+      h1BarColor: '#46515c',
+      accentColor: '#46515c'
     }
   }
 }
+
+import { marked } from 'marked'
 
 // 見出しアイテム
 interface HeadingItem {
@@ -231,12 +266,20 @@ interface HeadingItem {
   text: string
 }
 
-// Markdown本文から見出し（H1〜H3）を抽出
+// Markdown本文から見出し（H1〜H3）を抽出（コードブロック内は除外）
 function extractHeadings(markdown: string): HeadingItem[] {
-  const lines = markdown.split('\n')
+  const lines = markdown.split(/\r?\n/)
   const headings: HeadingItem[] = []
+  let inCodeBlock = false
+
   for (const line of lines) {
     const trimmed = line.trim()
+    if (trimmed.startsWith('```')) {
+      inCodeBlock = !inCodeBlock
+      continue
+    }
+    if (inCodeBlock) continue
+
     const match = trimmed.match(/^(#{1,3})\s+(.+)$/)
     if (match) {
       headings.push({
@@ -248,43 +291,11 @@ function extractHeadings(markdown: string): HeadingItem[] {
   return headings
 }
 
-// Markdownテーブルのパース
-interface ParsedTable {
-  headers: string[]
-  rows: string[][]
-}
-
-function parseMarkdownTable(block: string): ParsedTable | null {
-  const lines = block.split('\n').map((l) => l.trim()).filter(Boolean)
-  if (lines.length < 2) return null
-  if (!lines[0].includes('|')) return null
-
-  // 1行目: ヘッダー
-  const headers = lines[0]
-    .split('|')
-    .map((c) => c.trim())
-    .filter((_, i, arr) => (i > 0 && i < arr.length - 1) || arr.length <= 2)
-
-  // 2行目: アライメント行 (|---|---|)
-  const isAlignRow = /^\|?[\s-:]+\|[\s-:]+\|?/.test(lines[1])
-  if (!isAlignRow) return null
-
-  const rows: string[][] = []
-  for (let i = 2; i < lines.length; i++) {
-    const rawCells = lines[i].split('|').map((c) => c.trim())
-    const cells = rawCells.slice(1, -1)
-    if (cells.length > 0) {
-      rows.push(cells)
-    }
-  }
-
-  return { headers, rows }
-}
-
 export default function GeneratorView(): React.JSX.Element {
   const [fileData, setFileData] = useState<MarkdownFileData | null>(null)
   const [isDragging, setIsDragging] = useState<boolean>(false)
   const [templates, setTemplates] = useState<TemplateInfo[]>([])
+  const [customTemplatesList, setCustomTemplatesList] = useState<CustomTemplateData[]>([])
   const [selectedTemplate, setSelectedTemplate] = useState<string>('default')
   const [outputPath, setOutputPath] = useState<string>('')
 
@@ -311,6 +322,7 @@ export default function GeneratorView(): React.JSX.Element {
       window.pfpdfAPI.getOfficialTemplates(),
       window.pfpdfAPI.getCustomTemplates ? window.pfpdfAPI.getCustomTemplates() : Promise.resolve([])
     ]).then(([official, custom]) => {
+      setCustomTemplatesList(custom || [])
       const customFormatted: TemplateInfo[] = (custom || []).map((t) => ({
         id: t.id,
         name: `${t.name} (自作)`,
@@ -502,40 +514,365 @@ export default function GeneratorView(): React.JSX.Element {
     }
   }
 
+  // 選択中のカスタムテンプレート（存在する場合）
+  const selectedCustomTemplate = customTemplatesList.find((t) => t.id === selectedTemplate)
+
   // 現在選択されているテンプレートのフォーマット詳細
   const currentFormat: TemplateFormatDetail =
     TEMPLATE_DETAILS[selectedTemplate] || {
       id: selectedTemplate,
-      name: selectedTemplate.startsWith('custom-') ? '自作テンプレート (PPTX)' : selectedTemplate,
-      color: '#ea580c',
-      layoutName: '自作 (PowerPointインポート)',
-      fontName: 'PowerPointで設定されたフォント',
-      coverType: 'standalone',
-      coverTypeName: 'PPTXスライド表紙',
-      coverFeature: 'PPTXで配置した表紙テキストボックスに自動置換',
-      runningHeader: 'PowerPointスライドマスター準拠',
+      name: selectedCustomTemplate ? `${selectedCustomTemplate.name} (自作)` : '自作テンプレート (PPTX)',
+      color: selectedCustomTemplate?.theme?.primaryColor || '#ea580c',
+      paperBg: '#ffffff',
+      coverBg: selectedCustomTemplate?.theme?.backgroundColor || '#ffffff',
+      coverTextColor: selectedCustomTemplate?.theme?.textColor || '#1f2937',
+      fontFamily: 'sans',
+      layoutName: selectedCustomTemplate?.sourcePptx ? 'PowerPointインポート' : '自作テンプレート',
+      fontName: selectedCustomTemplate?.theme?.bodyFont || 'Noto Sans JP (モダンサンセリフ)',
+      coverType: selectedCustomTemplate ? (selectedCustomTemplate.hasCover ? 'standalone' : 'integrated') : 'standalone',
+      coverTypeName: selectedCustomTemplate?.sourcePptx ? 'PPTXスライド表紙' : '自作表紙',
+      coverFeature: 'PPTXテキストボックス自動置換 ＋ カスタム組版',
+      runningHeader: selectedCustomTemplate?.headerFooter?.headerText || '自作テンプレートヘッダー',
       pageNumberPos: '下部中央',
-      h1Style: { color: '#ea580c', borderBottom: '2px solid #ea580c' },
-      h2Style: { color: '#1f2937', borderLeft: '4px solid #ea580c' },
-      tableHeaderBg: '#ea580c',
+      h1Style: {
+        color: selectedCustomTemplate?.theme?.primaryColor || '#ea580c',
+        borderBottom: `2px solid ${selectedCustomTemplate?.theme?.primaryColor || '#ea580c'}`
+      },
+      h2Style: {
+        color: selectedCustomTemplate?.theme?.textColor || '#1f2937',
+        borderLeft: `4px solid ${selectedCustomTemplate?.theme?.primaryColor || '#ea580c'}`
+      },
+      tableHeaderBg: selectedCustomTemplate?.theme?.primaryColor || '#ea580c',
       features: ['PPTX表紙レイアウト', '自動テキスト置換', 'ノンブル中央', 'カスタムカラー'],
       badge: '自作PPTX',
       bestFor: '自社スライド・独自デザイン報告書',
       thumbnail: {
         hasTopBar: true,
         hasCenterTitle: false,
-        h1BarColor: '#ea580c',
-        accentColor: '#f97316'
+        h1BarColor: selectedCustomTemplate?.theme?.primaryColor || '#ea580c',
+        accentColor: selectedCustomTemplate?.theme?.secondaryColor || '#f97316'
       }
     }
 
   // Markdownから抽出した見出しリスト
   const markdownHeadings = fileData ? extractHeadings(fileData.body) : []
 
+  // 各テンプレート公式仕様に忠実な表紙コンテンツ描画
+  const renderCoverPageContent = () => {
+    // 1. PFN 公式テンプレート (全面ディープブルーグラデーション + 白文字 + CONFIDENTIAL)
+    if (selectedTemplate === 'pfn') {
+      return (
+        <div
+          className="w-full h-full p-8 md:p-10 flex flex-col justify-between text-white relative select-none"
+          style={{
+            background: 'linear-gradient(135deg, #111b64 0%, #19438f 52%, #1b75b4 100%)'
+          }}
+        >
+          {/* 右上 CONFIDENTIAL バッジ */}
+          <div className="flex justify-end">
+            <span className="bg-[#c00] text-white font-mono text-[9px] font-bold px-3 py-0.5 tracking-wider uppercase shadow-xs">
+              CONFIDENTIAL
+            </span>
+          </div>
+
+          {/* 中央タイトル部 */}
+          <div className="my-auto text-center space-y-3 px-4">
+            <div className="text-[10px] tracking-[0.25em] text-blue-200/90 font-medium uppercase font-mono">
+              PREFERRED NETWORKS REPORT
+            </div>
+            <h1 className="text-xl md:text-2xl font-black text-white leading-tight tracking-tight drop-shadow-xs">
+              {title || '(タイトル未設定)'}
+            </h1>
+            <div className="w-12 h-0.5 bg-blue-300/40 mx-auto my-3" />
+            <div className="text-xs text-blue-100/90 space-y-0.5 font-normal">
+              <div>{author || '著者未設定'}</div>
+              <div className="font-mono text-[11px] text-blue-200/70">{date || '日付未設定'}</div>
+            </div>
+          </div>
+
+          {/* 右下 PFN ロゴマーク */}
+          <div className="flex justify-end items-end pt-4">
+            <div className="flex items-center gap-1.5 opacity-90">
+              <div className="w-4 h-4 rounded-xs border-2 border-white/90 flex items-center justify-center font-bold text-[8px] text-white">
+                P
+              </div>
+              <span className="font-extrabold tracking-wider text-[11px] text-white font-sans">
+                Preferred Networks
+              </span>
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    // 2. Academic (学術論文: ジャーナル二重線マストヘッド + 学術明朝セリフ体)
+    if (selectedTemplate === 'academic') {
+      return (
+        <div className="w-full h-full p-8 md:p-10 flex flex-col justify-between bg-white text-[#20252b] font-serif relative select-none">
+          {/* 上部二重線マストヘッド */}
+          <div>
+            <div className="pb-2 border-b-[2.5px] border-[#243f5b] flex items-end justify-between">
+              <span className="text-[9px] font-bold text-[#243f5b] tracking-[0.28em] uppercase font-sans">
+                ACADEMIC RESEARCH PAPER
+              </span>
+              <span className="text-[9px] text-[#59636d] font-sans">
+                PFPD / SCHOLARLY
+              </span>
+            </div>
+            <div className="border-b-[0.8px] border-[#243f5b] mt-[2px]" />
+          </div>
+
+          {/* 中央メインエリア */}
+          <div className="my-auto space-y-4 px-2">
+            <span className="border border-[#8d2c2c] text-[#8d2c2c] text-[8.5px] font-bold font-sans tracking-widest px-2 py-0.5 uppercase inline-block">
+              CONFIDENTIAL
+            </span>
+            <h1 className="text-2xl font-serif font-bold text-[#20252b] leading-snug tracking-tight">
+              {title || '(タイトル未設定)'}
+            </h1>
+            <div className="pt-4 space-y-1 text-xs text-[#59636d]">
+              <div className="font-medium text-slate-800">{author || '著者未設定'}</div>
+              <div className="font-mono text-[11px] text-[#59636d]">{date || '日付未設定'}</div>
+            </div>
+          </div>
+
+          {/* 下部対称二重線 */}
+          <div>
+            <div className="border-b-[0.8px] border-[#243f5b] mb-[2px]" />
+            <div className="border-b-[2.5px] border-[#243f5b]" />
+          </div>
+        </div>
+      )
+    }
+
+    // 3. Technical (技術仕様書: 左端5mm深青緑縦バー + 等幅シリーズ名 + 高密度)
+    if (selectedTemplate === 'technical') {
+      return (
+        <div className="w-full h-full flex bg-white text-[#17202a] relative overflow-hidden select-none">
+          {/* 左端 5mm の深青緑バー */}
+          <div className="w-2.5 md:w-3 bg-[#086f83] shrink-0" />
+
+          {/* メインエリア */}
+          <div className="flex-1 p-8 md:p-10 flex flex-col justify-between">
+            <div className="flex items-center justify-between">
+              <span className="font-mono text-[9.5px] font-bold text-[#086f83] tracking-wider uppercase">
+                TECHNICAL DOCUMENTATION
+              </span>
+              <span className="border border-[#a12622] text-[#a12622] font-mono text-[8px] font-bold px-2 py-0.5 uppercase">
+                INTERNAL ONLY
+              </span>
+            </div>
+
+            <div className="my-auto space-y-3">
+              <h1 className="text-2xl font-bold text-[#17202a] leading-tight tracking-tight">
+                {title || '(タイトル未設定)'}
+              </h1>
+              <div className="w-12 h-1 bg-[#086f83] rounded-xs" />
+            </div>
+
+            <div className="pt-4 border-t border-[#aebbc4] flex items-end justify-between font-mono text-xs text-[#52606d]">
+              <div>
+                <span className="text-[10px] text-slate-400 block font-sans">AUTHOR</span>
+                <span className="font-medium text-[#17202a]">{author || '著者未設定'}</span>
+              </div>
+              <div className="text-right">
+                <span className="text-[10px] text-slate-400 block font-sans">DATE</span>
+                <span className="text-[11px]">{date || '日付未設定'}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    // 4. Book (書籍: クリーム紙 + 二重枠フレーム + 格調高い明朝セリフ体)
+    if (selectedTemplate === 'book') {
+      return (
+        <div className="w-full h-full p-4 bg-[#fdfbf6] text-[#292521] font-serif relative select-none">
+          {/* 二重枠フレーム */}
+          <div className="w-full h-full border-[1.5px] border-[#b8aea0] p-1.5 flex flex-col justify-between">
+            <div className="w-full h-full border-[0.6px] border-[#b8aea0] p-6 md:p-8 flex flex-col justify-between text-center relative">
+              <div className="text-[8.5px] tracking-[0.25em] text-[#71685d] uppercase">
+                MONOGRAPH SERIES
+              </div>
+
+              <div className="my-auto space-y-3 px-4">
+                <h1 className="text-xl md:text-2xl font-serif font-bold text-[#292521] leading-relaxed tracking-wide">
+                  {title || '(タイトル未設定)'}
+                </h1>
+                <div className="w-10 h-px bg-[#5b312e]/40 mx-auto" />
+              </div>
+
+              <div className="space-y-1 text-xs text-[#71685d]">
+                <div className="font-medium text-slate-900">{author || '著者未設定'}</div>
+                <div className="font-mono text-[11px] text-[#71685d]">{date || '日付未設定'}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    // 5. Notebook (ノートブック: アイボリー紙 + 右上ティール＆左下コーラル幾何学 + 枠線)
+    if (selectedTemplate === 'notebook') {
+      return (
+        <div className="w-full h-full p-4 bg-[#fffdf8] text-[#293b40] relative overflow-hidden select-none">
+          {/* 右上幾何学シェイプ */}
+          <div className="absolute -top-12 -right-10 w-32 h-24 bg-[#287d78] rotate-[-12deg] pointer-events-none" />
+          {/* 左下幾何学シェイプ */}
+          <div className="absolute -bottom-12 -left-10 w-36 h-24 bg-[#e66b58] rotate-[-12deg] pointer-events-none" />
+
+          {/* 内枠 */}
+          <div className="w-full h-full border-[1.5px] border-[#287d78] p-6 md:p-8 flex flex-col justify-between relative z-10">
+            <div className="flex items-center justify-between">
+              <span className="text-[9px] font-bold text-[#185b58] tracking-widest uppercase">
+                NOTEBOOK / REPORT
+              </span>
+              <span className="bg-[#fbe8e2] text-[#a63e32] text-[8px] font-bold rounded-full px-2.5 py-0.5 uppercase">
+                MEMO
+              </span>
+            </div>
+
+            <div className="my-auto space-y-3">
+              <h1 className="text-xl md:text-2xl font-bold text-[#293b40] leading-tight">
+                {title || '(タイトル未設定)'}
+              </h1>
+              <div className="w-12 h-1 bg-[#287d78] rounded-full" />
+            </div>
+
+            <div className="pt-3 border-t border-[#c9d5d2] flex items-end justify-between text-xs text-[#66777a]">
+              <div>
+                <span className="text-[10px] text-slate-400 block">担当</span>
+                <span className="font-medium text-[#293b40]">{author || '著者未設定'}</span>
+              </div>
+              <div className="text-right font-mono text-[11px]">
+                {date || '日付未設定'}
+              </div>
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    // 6. Default (標準ニュートラル: 大見出し左寄せ + 赤CONFIDENTIAL)
+    if (selectedTemplate === 'default') {
+      return (
+        <div className="w-full h-full p-8 md:p-10 flex flex-col justify-center bg-white text-[#222222] relative select-none">
+          <div className="space-y-4 max-w-[85%]">
+            <span className="text-[10px] text-[#a00000] font-bold tracking-widest uppercase block">
+              CONFIDENTIAL
+            </span>
+            <h1 className="text-2xl font-bold text-[#222222] leading-tight tracking-tight">
+              {title || '(タイトル未設定)'}
+            </h1>
+            <div className="pt-4 border-t border-slate-200 space-y-1 text-xs text-slate-600">
+              <div className="font-medium text-slate-800">{author || '著者未設定'}</div>
+              <div className="font-mono text-[11px] text-slate-400">{date || '日付未設定'}</div>
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    // 7. 自作 PPTX / カスタムテンプレート (PPTXの座標・フォント・配置を正確に反映)
+    if (selectedCustomTemplate && selectedCustomTemplate.slotMappings && selectedCustomTemplate.slotMappings.length > 0) {
+      return (
+        <div
+          className="w-full h-full relative overflow-hidden select-none"
+          style={{
+            backgroundColor: selectedCustomTemplate.theme?.backgroundColor || '#ffffff',
+            color: selectedCustomTemplate.theme?.textColor || '#1f2937'
+          }}
+        >
+          {selectedCustomTemplate.slotMappings.map((s) => {
+            let displayContent = s.originalText
+            if (s.slot === 'title' && title) displayContent = title
+            if (s.slot === 'author' && author) displayContent = author
+            if (s.slot === 'date' && date) displayContent = date
+
+            if (s.isShape) {
+              return (
+                <div
+                  key={s.id}
+                  style={{
+                    position: 'absolute',
+                    left: `${s.xPercent}%`,
+                    top: `${s.yPercent}%`,
+                    width: `${s.widthPercent}%`,
+                    height: `${s.heightPercent}%`,
+                    backgroundColor: s.backgroundColor || selectedCustomTemplate.theme?.primaryColor || '#ea580c',
+                    borderRadius: '2px'
+                  }}
+                />
+              )
+            }
+
+            if (s.imageDataUrl) {
+              return (
+                <img
+                  key={s.id}
+                  src={s.imageDataUrl}
+                  alt=""
+                  style={{
+                    position: 'absolute',
+                    left: `${s.xPercent}%`,
+                    top: `${s.yPercent}%`,
+                    width: `${s.widthPercent}%`,
+                    height: `${s.heightPercent}%`,
+                    objectFit: 'contain'
+                  }}
+                />
+              )
+            }
+
+            return (
+              <div
+                key={s.id}
+                style={{
+                  position: 'absolute',
+                  left: `${s.xPercent}%`,
+                  top: `${s.yPercent}%`,
+                  width: `${s.widthPercent}%`,
+                  minHeight: `${s.heightPercent}%`,
+                  color: s.color || selectedCustomTemplate.theme?.textColor || '#1f2937',
+                  fontSize: s.fontSizePt ? `${Math.round(s.fontSizePt * 0.7)}pt` : '12pt',
+                  fontWeight: s.fontWeight || (s.slot === 'title' ? 'bold' : 'normal'),
+                  textAlign: s.textAlign || 'left',
+                  lineHeight: 1.25,
+                  fontFamily: s.slot === 'title' ? selectedCustomTemplate.theme?.headingFont : selectedCustomTemplate.theme?.bodyFont
+                }}
+                className="p-1 leading-snug break-words"
+              >
+                {displayContent}
+              </div>
+            )
+          })}
+        </div>
+      )
+    }
+
+    // フォールバック自作表紙
+    return (
+      <div className="w-full h-full p-8 md:p-10 flex flex-col justify-between bg-white text-slate-800 relative select-none">
+        <div className="w-12 h-1.5 rounded-full" style={{ backgroundColor: currentFormat.color }} />
+        <div className="my-auto space-y-2">
+          <h1 className="text-2xl font-bold" style={{ color: currentFormat.color }}>
+            {title || '(タイトル未設定)'}
+          </h1>
+          <p className="text-xs text-slate-500">カスタムテンプレート表紙</p>
+        </div>
+        <div className="text-xs text-slate-600 border-t border-slate-200 pt-3 flex justify-between items-end">
+          <div>{author || '著者未設定'}</div>
+          <div className="font-mono text-[11px] text-slate-400">{date || '日付未設定'}</div>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="flex-1 flex flex-col md:flex-row gap-6 p-6 max-w-7xl mx-auto w-full overflow-hidden select-none">
+    <div className="flex-1 flex flex-col md:flex-row gap-5 p-6 max-w-7xl mx-auto w-full overflow-hidden select-none">
       {/* 左カラム: 入力・設定・アクション */}
-      <div className="w-full md:w-1/2 flex flex-col gap-5 overflow-y-auto pr-1">
+      <div className="w-full md:w-[46%] flex flex-col gap-4 overflow-y-auto pr-1">
         {/* ファイル読み込みドロップゾーン */}
         {!fileData ? (
           <div
@@ -543,24 +880,26 @@ export default function GeneratorView(): React.JSX.Element {
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
             onClick={handleSelectFile}
-            className={`border-2 border-dashed rounded-2xl p-8 flex flex-col items-center justify-center text-center cursor-pointer transition-all duration-200 group bg-white shadow-sm ${
+            className={`border border-dashed rounded-xl p-8 flex flex-col items-center justify-center text-center cursor-pointer transition-colors duration-150 group bg-white shadow-2xs ${
               isDragging
-                ? 'border-blue-500 bg-blue-50/50 scale-[1.01] ring-4 ring-blue-500/10'
-                : 'border-slate-300 hover:border-blue-400 hover:bg-slate-50/50'
+                ? 'border-slate-800 bg-slate-50'
+                : 'border-slate-300 hover:border-slate-400 hover:bg-slate-50/50'
             }`}
           >
-            <div className="w-16 h-16 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 mb-4 group-hover:scale-110 transition-transform pointer-events-none">
-              <UploadCloud className="w-8 h-8" />
+            <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500 mb-3 group-hover:text-slate-800 transition-colors pointer-events-none">
+              <Upload className="w-5 h-5 stroke-[1.75]" />
             </div>
-            <h3 className="text-base font-semibold text-slate-800 mb-1 pointer-events-none">
+            <h3 className="text-xs font-semibold text-slate-800 mb-1 pointer-events-none">
               Markdown ファイルをドラッグ＆ドロップ
             </h3>
-            <p className="text-xs text-slate-500 mb-4 pointer-events-none">または、ここをクリックしてファイルを選択</p>
+            <p className="text-[11px] text-slate-400 mb-3 pointer-events-none">
+              または、クリックしてファイルを選択
+            </p>
             <button
               type="button"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-medium shadow-sm transition pointer-events-none"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-medium shadow-2xs transition pointer-events-none"
             >
-              <FolderOpen className="w-4 h-4" />
+              <FolderOpen className="w-3.5 h-3.5" />
               ファイルを選択 (.md)
             </button>
           </div>
@@ -570,39 +909,39 @@ export default function GeneratorView(): React.JSX.Element {
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
-            className={`bg-white border rounded-2xl p-4 shadow-sm flex items-center justify-between transition-all ${
-              isDragging ? 'border-blue-500 bg-blue-50/40 ring-2 ring-blue-500/20' : 'border-slate-200'
+            className={`bg-white border rounded-xl p-3.5 shadow-2xs flex items-center justify-between transition-colors ${
+              isDragging ? 'border-slate-800 bg-slate-50' : 'border-slate-200'
             }`}
           >
             <div className="flex items-center gap-3 overflow-hidden pointer-events-none">
-              <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
-                <FileCode className="w-5 h-5" />
+              <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600 shrink-0">
+                <FileCode className="w-4 h-4" />
               </div>
               <div className="truncate">
-                <div className="text-sm font-semibold text-slate-800 truncate flex items-center gap-2">
+                <div className="text-xs font-semibold text-slate-800 truncate flex items-center gap-2">
                   <span>{fileData.fileName}</span>
                   {fileData.frontMatter.template && (
-                    <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-mono font-normal">
+                    <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.2 rounded font-mono">
                       指定: {fileData.frontMatter.template}
                     </span>
                   )}
                 </div>
-                <div className="text-xs text-slate-400 truncate">{fileData.filePath}</div>
+                <div className="text-[11px] text-slate-400 font-mono truncate">{fileData.filePath}</div>
               </div>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-1.5 shrink-0">
               <button
                 onClick={handleSelectFile}
-                className="text-xs text-blue-600 hover:text-blue-800 font-medium px-2 py-1 rounded hover:bg-blue-50 transition"
+                className="text-xs text-slate-600 hover:text-slate-900 font-medium px-2 py-1 rounded hover:bg-slate-100 transition"
               >
                 変更
               </button>
               <button
                 onClick={() => setFileData(null)}
-                className="text-slate-400 hover:text-red-500 p-1 rounded-lg hover:bg-slate-100 transition"
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-md hover:bg-slate-100 transition"
                 title="閉じる"
               >
-                <X className="w-4 h-4" />
+                <X className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
@@ -611,18 +950,18 @@ export default function GeneratorView(): React.JSX.Element {
         {/* Front Matter & 設定フォーム */}
         {fileData && (
           <>
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
+            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs space-y-3.5">
               <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                <div className="flex items-center gap-2 text-slate-800 font-semibold text-sm">
-                  <FileText className="w-4 h-4 text-blue-600" />
-                  <span>Front Matter 設定 (メタ情報)</span>
+                <div className="flex items-center gap-2 text-slate-900 font-semibold text-xs">
+                  <FileText className="w-3.5 h-3.5 text-slate-500" />
+                  <span>文書情報 (メタデータ)</span>
                 </div>
-                <span className="text-[11px] text-slate-400">PDFの表紙やヘッダーに反映</span>
+                <span className="text-[11px] text-slate-400">PDF表紙・ヘッダーに反映</span>
               </div>
 
               {/* タイトル */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                <label className="block text-[11px] font-medium text-slate-600 mb-1">
                   文書タイトル (title)
                 </label>
                 <input
@@ -630,15 +969,15 @@ export default function GeneratorView(): React.JSX.Element {
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder="例: プロジェクト仕様書"
-                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition"
+                  className="w-full px-3 py-1.5 text-xs text-slate-800 border border-slate-200 rounded-lg focus:outline-none focus:border-slate-800 focus:ring-1 focus:ring-slate-800 transition"
                 />
               </div>
 
               {/* 著者 & 日付 */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2.5">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1">
-                    <User className="w-3.5 h-3.5 text-slate-400" />
+                  <label className="block text-[11px] font-medium text-slate-600 mb-1 flex items-center gap-1">
+                    <User className="w-3 h-3 text-slate-400" />
                     著者 (author)
                   </label>
                   <input
@@ -646,19 +985,19 @@ export default function GeneratorView(): React.JSX.Element {
                     value={author}
                     onChange={(e) => setAuthor(e.target.value)}
                     placeholder="例: 開発チーム"
-                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition"
+                    className="w-full px-3 py-1.5 text-xs text-slate-800 border border-slate-200 rounded-lg focus:outline-none focus:border-slate-800 focus:ring-1 focus:ring-slate-800 transition"
                   />
                 </div>
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="text-xs font-semibold text-slate-700 flex items-center gap-1">
-                      <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                    <label className="text-[11px] font-medium text-slate-600 flex items-center gap-1">
+                      <Calendar className="w-3 h-3 text-slate-400" />
                       日付 (date)
                     </label>
                     <button
                       type="button"
                       onClick={() => setDate(new Date().toISOString().slice(0, 10))}
-                      className="text-[10px] text-blue-600 hover:underline flex items-center gap-0.5"
+                      className="text-[10px] text-slate-500 hover:text-slate-900 hover:underline flex items-center gap-0.5"
                     >
                       <RotateCcw className="w-2.5 h-2.5" /> 今日
                     </button>
@@ -667,18 +1006,18 @@ export default function GeneratorView(): React.JSX.Element {
                     type="date"
                     value={date}
                     onChange={(e) => setDate(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition"
+                    className="w-full px-3 py-1.5 text-xs text-slate-800 border border-slate-200 rounded-lg focus:outline-none focus:border-slate-800 focus:ring-1 focus:ring-slate-800 transition font-mono"
                   />
                 </div>
               </div>
 
               {/* 目次トグル */}
-              <div className="flex items-center justify-between pt-1">
+              <div className="flex items-center justify-between pt-1 border-t border-slate-100">
                 <div className="flex items-center gap-2">
-                  <ListOrdered className="w-4 h-4 text-slate-500" />
+                  <ListOrdered className="w-3.5 h-3.5 text-slate-400" />
                   <div>
-                    <span className="text-xs font-semibold text-slate-700 block">目次を自動生成 (toc)</span>
-                    <span className="text-[11px] text-slate-400 block">文書内の見出し（H1〜H3）から目次ページを挿入</span>
+                    <span className="text-xs font-medium text-slate-700 block">目次の自動生成 (toc)</span>
+                    <span className="text-[10px] text-slate-400 block">本文見出しから目次ページを自動挿入</span>
                   </div>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
@@ -688,37 +1027,31 @@ export default function GeneratorView(): React.JSX.Element {
                     onChange={(e) => setToc(e.target.checked)}
                     className="sr-only peer"
                   />
-                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-slate-900"></div>
                 </label>
               </div>
             </div>
 
-            {/* テンプレート選択 ＆ フォーマットビジュアルカード */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
+            {/* テンプレート選択 */}
+            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs space-y-3">
               <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                <div className="flex items-center gap-2 text-slate-800 font-semibold text-sm">
-                  <BookOpen className="w-4 h-4 text-blue-600" />
-                  <span>適用テンプレートを選択</span>
+                <div className="flex items-center gap-2 text-slate-900 font-semibold text-xs">
+                  <BookOpen className="w-3.5 h-3.5 text-slate-500" />
+                  <span>適用テンプレート</span>
                 </div>
                 <span className="text-[11px] text-slate-500 font-mono">
-                  現在: <strong className="text-blue-700 font-bold">{currentFormat.name}</strong>
+                  選択中: <strong className="text-slate-900 font-semibold">{currentFormat.name}</strong>
                 </span>
               </div>
 
-              {/* テンプレート一覧グリッド (ビジュアルカード ＋ ミニサムネイル) */}
-              <div className="grid grid-cols-2 gap-2.5">
+              {/* テンプレート一覧グリッド (洗練されたミニマルカード) */}
+              <div className="grid grid-cols-2 gap-2">
                 {templates.map((tpl) => {
                   const isSelected = selectedTemplate === tpl.id
                   const detail = TEMPLATE_DETAILS[tpl.id] || {
                     color: tpl.id.startsWith('custom-') ? '#ea580c' : '#0f5e5a',
                     layoutName: tpl.category === 'custom' ? '自作 (PPTX)' : '標準レポート',
-                    badge: tpl.category === 'custom' ? '自作PPTX' : '公式',
-                    thumbnail: {
-                      hasTopBar: true,
-                      hasCenterTitle: false,
-                      h1BarColor: tpl.id.startsWith('custom-') ? '#ea580c' : '#0f5e5a',
-                      accentColor: '#f97316'
-                    }
+                    badge: tpl.category === 'custom' ? '自作PPTX' : '公式'
                   }
 
                   return (
@@ -726,163 +1059,103 @@ export default function GeneratorView(): React.JSX.Element {
                       key={tpl.id}
                       type="button"
                       onClick={() => setSelectedTemplate(tpl.id)}
-                      className={`text-left p-3 rounded-xl border transition-all duration-150 relative overflow-hidden group flex gap-2.5 ${
+                      className={`text-left p-2.5 rounded-lg border transition-all duration-150 relative ${
                         isSelected
-                          ? 'border-blue-500 bg-blue-50/50 ring-2 ring-blue-500/20 shadow-xs'
-                          : 'border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50/60'
+                          ? 'border-slate-900 bg-slate-50/70 ring-1 ring-slate-900 shadow-2xs'
+                          : 'border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50/40'
                       }`}
                     >
-                      {/* 左側のカラーアクセント縦ライン */}
-                      <div
-                        className="absolute left-0 top-0 bottom-0 w-1.5"
-                        style={{ backgroundColor: detail.color }}
-                      />
-
-                      {/* A4ミニチュアプレビューアイコン */}
-                      <div className="w-8 h-11 bg-white border border-slate-300 rounded-[2px] shadow-2xs relative shrink-0 overflow-hidden flex flex-col p-0.5 ml-1">
-                        {detail.thumbnail?.hasTopBar && (
-                          <div
-                            className="h-1 w-full rounded-xs mb-0.5"
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-1.5 truncate">
+                          <span
+                            className="w-2 h-2 rounded-full shrink-0"
                             style={{ backgroundColor: detail.color }}
                           />
-                        )}
-                        {detail.thumbnail?.hasCenterTitle ? (
-                          <div className="my-auto space-y-0.5">
-                            <div
-                              className="h-0.5 w-4 mx-auto rounded-xs"
-                              style={{ backgroundColor: detail.color }}
-                            />
-                            <div className="h-0.5 w-2.5 mx-auto bg-slate-200 rounded-xs" />
-                          </div>
-                        ) : (
-                          <div className="mt-1 space-y-0.5">
-                            <div
-                              className="h-0.5 w-5 rounded-xs"
-                              style={{ backgroundColor: detail.color }}
-                            />
-                            <div className="h-0.5 w-3.5 bg-slate-200 rounded-xs" />
-                          </div>
-                        )}
-                        <div className="mt-auto flex justify-center pb-0.5">
-                          <div className="h-0.5 w-2 bg-slate-300 rounded-xs" />
-                        </div>
-                      </div>
-
-                      {/* テキスト詳細 */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between mb-0.5">
-                          <span
-                            className={`text-xs font-bold truncate ${
-                              isSelected ? 'text-blue-800' : 'text-slate-800'
-                            }`}
-                          >
+                          <span className="text-xs font-semibold text-slate-900 truncate">
                             {tpl.name}
                           </span>
-                          {isSelected && <Check className="w-3.5 h-3.5 text-blue-600 shrink-0" />}
                         </div>
-
-                        <div className="mb-1">
-                          <span className="text-[9px] bg-slate-100 text-slate-600 px-1 py-0.2 rounded font-medium">
-                            {detail.badge}
-                          </span>
-                        </div>
-
-                        <p className="text-[10px] text-slate-500 line-clamp-2 leading-tight">
-                          {tpl.description}
-                        </p>
+                        {isSelected && <Check className="w-3 h-3 text-slate-900 shrink-0" />}
                       </div>
+
+                      <p className="text-[10px] text-slate-500 line-clamp-1 leading-normal">
+                        {detail.layoutName}
+                      </p>
                     </button>
                   )
                 })}
               </div>
 
-              {/* 選択中テンプレートの「組版フォーマット仕様」カード */}
-              <div className="p-4 bg-gradient-to-br from-slate-50 via-white to-blue-50/30 rounded-xl border border-slate-200 space-y-3 text-xs shadow-2xs">
-                <div className="flex items-center justify-between font-bold text-slate-800 border-b border-slate-200/80 pb-2">
-                  <div className="flex items-center gap-1.5 text-blue-900">
-                    <Palette className="w-4 h-4 text-blue-600" />
-                    <span>【{currentFormat.name}】組版フォーマット仕様</span>
-                  </div>
+              {/* 選択中テンプレートの仕様スペックサマリー */}
+              <div className="p-3 bg-slate-50/70 rounded-lg border border-slate-200/70 space-y-2 text-xs">
+                <div className="flex items-center justify-between text-slate-700 font-medium pb-1.5 border-b border-slate-200/60 text-[11px]">
                   <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] bg-blue-100/70 text-blue-800 border border-blue-200 px-2 py-0.5 rounded-md font-semibold">
-                      {currentFormat.coverTypeName}
-                    </span>
-                    <span className="text-[10px] bg-white border border-slate-200 px-2 py-0.5 rounded-md font-mono text-slate-600">
-                      A4 縦
-                    </span>
+                    <Palette className="w-3.5 h-3.5 text-slate-500" />
+                    <span>【{currentFormat.name}】 仕様サマリー</span>
                   </div>
+                  <span className="font-mono text-[10px] text-slate-500">
+                    A4 縦
+                  </span>
                 </div>
 
-                {/* スペックグリッド */}
-                <div className="grid grid-cols-2 gap-2 text-[11px]">
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
                   <div>
-                    <span className="text-slate-400 block">レイアウト種別:</span>
-                    <span className="font-semibold text-slate-700">{currentFormat.layoutName}</span>
+                    <span className="text-slate-400">表紙形式: </span>
+                    <span className="text-slate-700 font-medium">{currentFormat.coverTypeName}</span>
                   </div>
                   <div>
-                    <span className="text-slate-400 block">テーマカラー:</span>
-                    <span
-                      className="font-mono font-bold flex items-center gap-1.5"
-                      style={{ color: currentFormat.color }}
-                    >
+                    <span className="text-slate-400">テーマ色: </span>
+                    <span className="font-mono text-slate-700 font-medium inline-flex items-center gap-1">
                       <span
-                        className="w-2.5 h-2.5 rounded-full inline-block shadow-2xs"
+                        className="w-2 h-2 rounded-full inline-block"
                         style={{ backgroundColor: currentFormat.color }}
                       />
                       {currentFormat.color}
                     </span>
                   </div>
-                  <div>
-                    <span className="text-slate-400 block">フォント仕様:</span>
-                    <span className="text-slate-700 truncate block">{currentFormat.fontName}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block">ページ番号位置:</span>
-                    <span className="text-slate-700">{currentFormat.pageNumberPos}</span>
+                  <div className="col-span-2">
+                    <span className="text-slate-400">書体: </span>
+                    <span className="text-slate-700">{currentFormat.fontName}</span>
                   </div>
                   <div className="col-span-2">
-                    <span className="text-slate-400 block">ランニングヘッダー:</span>
-                    <span className="text-slate-700">{currentFormat.runningHeader}</span>
-                  </div>
-                  <div className="col-span-2">
-                    <span className="text-slate-400 block">推奨用途:</span>
-                    <span className="text-blue-900 font-medium">{currentFormat.bestFor}</span>
+                    <span className="text-slate-400">推奨用途: </span>
+                    <span className="text-slate-700">{currentFormat.bestFor}</span>
                   </div>
                 </div>
 
-                {/* スタイル見本（H1 / H2 / 表ヘッダー ミニチュア） */}
-                <div className="pt-2.5 border-t border-slate-200/70 flex flex-wrap items-center gap-4 text-[11px]">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-slate-400">H1見出し:</span>
+                {/* スタイル見本（H1 / H2 / 表ヘッダー） */}
+                <div className="pt-2 border-t border-slate-200/60 flex items-center gap-3 text-[11px]">
+                  <div className="flex items-center gap-1">
+                    <span className="text-slate-400 text-[10px]">H1:</span>
                     <span
                       style={{
                         color: currentFormat.h1Style.color,
                         borderBottom: currentFormat.h1Style.borderBottom
                       }}
-                      className="font-bold px-1"
+                      className="font-bold text-[10px] px-1"
                     >
                       大見出し
                     </span>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-slate-400">H2見出し:</span>
+                  <div className="flex items-center gap-1">
+                    <span className="text-slate-400 text-[10px]">H2:</span>
                     <span
                       style={{
                         color: currentFormat.h2Style.color,
                         borderLeft: currentFormat.h2Style.borderLeft
                       }}
-                      className="font-bold pl-1.5"
+                      className="font-bold text-[10px] pl-1"
                     >
                       中見出し
                     </span>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-slate-400">表ヘッダー:</span>
+                  <div className="flex items-center gap-1">
+                    <span className="text-slate-400 text-[10px]">表:</span>
                     <span
                       style={{ backgroundColor: currentFormat.tableHeaderBg }}
-                      className="text-white text-[10px] px-1.5 py-0.5 rounded font-bold"
+                      className="text-white text-[9px] px-1.5 py-0.2 rounded font-medium"
                     >
-                      項目名
+                      項目
                     </span>
                   </div>
                 </div>
@@ -890,9 +1163,9 @@ export default function GeneratorView(): React.JSX.Element {
             </div>
 
             {/* 出力先 & PDF生成ボタン */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
+            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs space-y-3">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                <label className="block text-[11px] font-medium text-slate-600 mb-1">
                   出力先 PDF ファイルパス
                 </label>
                 <div className="flex gap-2">
@@ -901,34 +1174,34 @@ export default function GeneratorView(): React.JSX.Element {
                     value={outputPath}
                     onChange={(e) => setOutputPath(e.target.value)}
                     placeholder="C:\Users\...\output.pdf"
-                    className="flex-1 px-3 py-2 text-xs font-mono border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition"
+                    className="flex-1 px-3 py-1.5 text-xs font-mono border border-slate-200 rounded-lg focus:outline-none focus:border-slate-800 focus:ring-1 focus:ring-slate-800 transition"
                   />
                   <button
                     type="button"
                     onClick={handleSelectOutputPath}
-                    className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-medium border border-slate-200 transition shrink-0"
+                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium border border-slate-200 transition shrink-0"
                   >
                     参照...
                   </button>
                 </div>
               </div>
 
-              {/* PDF生成実行ボタン */}
+              {/* PDF書き出しボタン */}
               <button
                 type="button"
                 onClick={handleGenerate}
                 disabled={isGenerating || !fileData || !outputPath}
-                className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 text-white rounded-xl text-sm font-bold shadow-md transition flex items-center justify-center gap-2"
+                className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white rounded-lg text-xs font-medium shadow-2xs transition flex items-center justify-center gap-2 cursor-pointer"
               >
                 {isGenerating ? (
                   <>
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                     <span>PDF をレンダリング中...</span>
                   </>
                 ) : (
                   <>
-                    <Sparkles className="w-4 h-4" />
-                    <span>【{currentFormat.name}】で PDF を生成する</span>
+                    <FileDown className="w-4 h-4" />
+                    <span>PDF を書き出す</span>
                   </>
                 )}
               </button>
@@ -938,80 +1211,84 @@ export default function GeneratorView(): React.JSX.Element {
       </div>
 
       {/* 右カラム: プレビュー & ログ / 完了結果 */}
-      <div className="w-full md:w-1/2 flex flex-col bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden h-full min-h-[500px]">
+      <div className="w-full md:w-[54%] flex flex-col bg-white border border-slate-200 rounded-xl shadow-2xs overflow-hidden h-full min-h-[500px]">
         {/* タブバー */}
-        <div className="flex items-center justify-between border-b border-slate-200 px-4 py-2.5 bg-slate-50 shrink-0">
-          <div className="flex items-center gap-1 bg-slate-200/60 p-1 rounded-xl">
+        <div className="flex items-center justify-between border-b border-slate-200/90 px-4 py-2 bg-white shrink-0">
+          <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200/70 text-xs">
             <button
               type="button"
               onClick={() => setActiveTab('formatted')}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition ${
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-md transition-all ${
                 activeTab === 'formatted'
-                  ? 'bg-white text-blue-700 shadow-sm'
+                  ? 'bg-white text-slate-900 font-semibold shadow-2xs'
                   : 'text-slate-500 hover:text-slate-800'
               }`}
             >
               <Eye className="w-3.5 h-3.5" />
-              フォーマット適用プレビュー
+              組版プレビュー
             </button>
             <button
               type="button"
               onClick={() => setActiveTab('raw')}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition ${
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-md transition-all ${
                 activeTab === 'raw'
-                  ? 'bg-white text-slate-800 shadow-sm'
+                  ? 'bg-white text-slate-900 font-semibold shadow-2xs'
                   : 'text-slate-500 hover:text-slate-800'
               }`}
             >
               <FileText className="w-3.5 h-3.5" />
-              生テキスト
+              Markdown
             </button>
             <button
               type="button"
               onClick={() => setActiveTab('logs')}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition ${
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-md transition-all ${
                 activeTab === 'logs'
-                  ? 'bg-white text-slate-800 shadow-sm'
+                  ? 'bg-white text-slate-900 font-semibold shadow-2xs'
                   : 'text-slate-500 hover:text-slate-800'
               }`}
             >
               <Terminal className="w-3.5 h-3.5" />
               実行ログ
               {logs.length > 0 && (
-                <span className="w-2 h-2 rounded-full bg-blue-500 inline-block animate-pulse" />
+                <span className="w-1.5 h-1.5 rounded-full bg-slate-400 inline-block" />
               )}
             </button>
           </div>
 
-          {progress && (
-            <div className="text-[11px] font-mono text-slate-500 flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-              <span className="font-bold uppercase text-blue-600">[{progress.stage}]</span>
-              <span className="truncate max-w-[160px]">{progress.message}</span>
-            </div>
-          )}
+          <div className="text-[11px] font-mono text-slate-400 flex items-center gap-2">
+            {progress ? (
+              <span className="text-slate-700 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="font-semibold uppercase">[{progress.stage}]</span>
+                <span className="truncate max-w-[140px]">{progress.message}</span>
+              </span>
+            ) : (
+              <span>A4 (210 × 297 mm)</span>
+            )}
+          </div>
         </div>
 
-        {/* 生成完了バナー */}
+        {/* 出力完了バナー */}
         {result && (
           <div
-            className={`p-4 border-b flex items-center justify-between shrink-0 ${
+            className={`mx-4 mt-3 p-3 rounded-lg flex items-center justify-between text-xs shrink-0 transition-all ${
               result.success
-                ? 'bg-emerald-50/70 border-emerald-200 text-emerald-900'
-                : 'bg-red-50/70 border-red-200 text-red-900'
+                ? 'bg-slate-900 text-white shadow-2xs'
+                : 'bg-red-50 border border-red-200 text-red-900'
             }`}
           >
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2.5 overflow-hidden">
               {result.success ? (
-                <CheckCircle2 className="w-6 h-6 text-emerald-600 shrink-0" />
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
               ) : (
-                <AlertCircle className="w-6 h-6 text-red-600 shrink-0" />
+                <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
               )}
-              <div>
-                <div className="text-xs font-bold">
-                  {result.success ? 'PDF の生成に成功しました！' : 'PDF 生成エラー'}
+              <div className="truncate">
+                <div className="font-semibold truncate">
+                  {result.success ? 'PDF を書き出しました' : 'PDF 書き出しエラー'}
                 </div>
-                <div className="text-[11px] opacity-80 truncate max-w-sm">
+                <div className="text-[11px] opacity-75 font-mono truncate">
                   {result.success
                     ? `${result.outputPdfPath} (${((result.byteSize || 0) / 1024).toFixed(1)} KB)`
                     : result.error}
@@ -1020,22 +1297,22 @@ export default function GeneratorView(): React.JSX.Element {
             </div>
 
             {result.success && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 shrink-0 ml-3">
                 <button
                   type="button"
                   onClick={handleOpenPdf}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-sm transition"
+                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-900 rounded-md text-xs font-medium transition cursor-pointer"
                 >
-                  <ExternalLink className="w-3.5 h-3.5" />
+                  <ExternalLink className="w-3 h-3" />
                   PDFを開く
                 </button>
                 <button
                   type="button"
                   onClick={handleOpenFolder}
-                  className="p-1.5 bg-white border border-emerald-300 text-emerald-800 hover:bg-emerald-100 rounded-lg text-xs transition"
-                  title="保存フォルダを開く"
+                  className="p-1 hover:bg-slate-800 text-slate-300 hover:text-white rounded-md transition cursor-pointer"
+                  title="保存先フォルダを表示"
                 >
-                  <Folder className="w-4 h-4" />
+                  <Folder className="w-3.5 h-3.5" />
                 </button>
               </div>
             )}
@@ -1043,296 +1320,253 @@ export default function GeneratorView(): React.JSX.Element {
         )}
 
         {/* コンテンツエリア */}
-        <div className="flex-1 overflow-y-auto bg-slate-100/70 p-5">
+        <div className="flex-1 overflow-y-auto bg-[#ebedef] p-5">
           {activeTab === 'formatted' ? (
             fileData ? (
-              /* フォーマット適用リアルタイムプレビュー (A4用紙シートシミュレーション) */
-              <div className="space-y-6 max-w-2xl mx-auto flex flex-col items-center">
-                {/* プレビューステータスバー */}
-                <div className="w-full flex items-center justify-between px-3 py-2 bg-white/90 backdrop-blur-xs border border-slate-200/90 rounded-xl text-[11px] text-slate-600 shadow-2xs">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="w-2.5 h-2.5 rounded-full inline-block"
-                      style={{ backgroundColor: currentFormat.color }}
-                    />
-                    <span className="font-semibold text-slate-800">
-                      【{currentFormat.name}】 組版シミュレーション
-                    </span>
-                    <span className="text-slate-400">|</span>
-                    <span className="text-slate-500 font-mono">A4 縦 (210×297mm)</span>
-                  </div>
-                  <span className="text-[10px] text-blue-700 bg-blue-50 border border-blue-200/60 px-2 py-0.5 rounded-full font-medium">
-                    {currentFormat.coverTypeName}
-                  </span>
-                </div>
-
+              /* A4用紙シート リアルタイム組版シミュレーション */
+              <div className="space-y-6 max-w-xl mx-auto flex flex-col items-center">
                 {/* ページ 1: 独立表紙 (coverType === 'standalone' の場合) */}
                 {currentFormat.coverType === 'standalone' && (
-                  <div className="bg-white shadow-md border border-slate-300/80 rounded-xs w-full max-w-[520px] aspect-[1/1.414] p-10 flex flex-col justify-between relative overflow-hidden transition-all duration-200">
-                    {/* ページ右上バッジ */}
-                    <div className="absolute top-3 right-3 text-[10px] font-mono text-slate-400 bg-slate-100/90 px-1.5 py-0.5 rounded">
-                      Page 1 (表紙)
+                  <div
+                    style={{
+                      backgroundColor: currentFormat.paperBg
+                    }}
+                    className="shadow-[0_2px_14px_rgba(0,0,0,0.06)] border border-slate-300/70 rounded-[1px] w-full max-w-[490px] aspect-[1/1.414] relative overflow-hidden transition-all duration-200"
+                  >
+                    {/* ページ右上の控えめなノンブル表示 */}
+                    <div className="absolute top-3 right-3 text-[9px] font-mono opacity-40 z-20">
+                      1 / 2 表紙
                     </div>
 
-                    {/* 表紙トップ帯 (PFN, Technical, Notebookなど) */}
-                    <div>
-                      {currentFormat.thumbnail.hasTopBar && (
-                        <div
-                          className="h-2.5 w-32 rounded-xs mb-8"
-                          style={{ backgroundColor: currentFormat.color }}
-                        />
-                      )}
-                    </div>
-
-                    {/* 中央タイトル部 */}
-                    <div className="my-auto space-y-3">
-                      <span className="text-[10px] font-mono text-slate-400 uppercase tracking-widest block">
-                        DOCUMENT TITLE
-                      </span>
-                      <h1
-                        style={{ color: currentFormat.color }}
-                        className="text-2xl font-bold tracking-tight leading-snug break-words"
-                      >
-                        {title || '(タイトル未設定)'}
-                      </h1>
-                      <div
-                        className="w-16 h-1 rounded-full mt-3"
-                        style={{ backgroundColor: currentFormat.color, opacity: 0.3 }}
-                      />
-                    </div>
-
-                    {/* 下部著者・日付部 */}
-                    <div className="pt-6 border-t border-slate-200/80 flex items-end justify-between text-xs text-slate-600">
-                      <div className="space-y-1">
-                        <span className="text-[10px] text-slate-400 block font-mono">AUTHOR</span>
-                        <div className="font-semibold text-slate-800 flex items-center gap-1.5">
-                          <User className="w-3.5 h-3.5 text-slate-400" />
-                          <span>{author || '著者未設定'}</span>
-                        </div>
-                      </div>
-                      <div className="text-right space-y-1">
-                        <span className="text-[10px] text-slate-400 block font-mono">DATE</span>
-                        <div className="font-mono text-slate-600 flex items-center gap-1.5 justify-end">
-                          <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                          <span>{date || '日付未設定'}</span>
-                        </div>
-                      </div>
-                    </div>
+                    {/* 公式テンプレート実体準拠の表紙レンダラー */}
+                    {renderCoverPageContent()}
                   </div>
                 )}
 
-                {/* ページ 2（または一体型のページ 1）: 目次 ＆ 本文組版 */}
-                <div className="bg-white shadow-md border border-slate-300/80 rounded-xs w-full max-w-[520px] min-h-[735px] p-10 flex flex-col justify-between relative overflow-hidden transition-all duration-200">
-                  {/* ページ右上バッジ */}
-                  <div className="absolute top-3 right-3 text-[10px] font-mono text-slate-400 bg-slate-100/90 px-1.5 py-0.5 rounded">
-                    Page {currentFormat.coverType === 'standalone' ? '2' : '1'} (本文)
+                {/* ページ 2（または compact などの一体型 1ページ目）: 本文組版 */}
+                <div
+                  style={{
+                    backgroundColor: currentFormat.paperBg
+                  }}
+                  className={`shadow-[0_2px_14px_rgba(0,0,0,0.06)] border border-slate-300/70 rounded-[1px] w-full max-w-[490px] min-h-[700px] p-8 md:p-10 flex flex-col justify-between relative overflow-hidden transition-all duration-200 ${
+                    currentFormat.fontFamily === 'serif' ? 'font-serif text-[#20252b]' : 'font-sans text-slate-700'
+                  }`}
+                >
+                  {/* ページ右上の控えめなノンブル表示 */}
+                  <div className="absolute top-4 right-4 text-[10px] font-mono text-slate-400">
+                    {currentFormat.coverType === 'standalone' ? '2 / 2 本文' : '1 / 1 本文'}
                   </div>
 
                   <div>
-                    {/* 上部ランニングヘッダー */}
-                    <div className="border-b border-slate-200/80 pb-2 mb-6 flex items-center justify-between text-[10px] font-mono text-slate-400">
-                      <span className="truncate max-w-[200px]">{title || 'ドキュメント'}</span>
-                      <span className="truncate max-w-[180px]">
-                        {currentFormat.runningHeader}
-                      </span>
-                    </div>
+                    {/* 上部ランニングヘッダー (compact 以外) */}
+                    {currentFormat.coverType !== 'integrated' && (
+                      <div
+                        className={`pb-2 mb-6 flex items-center justify-between text-[10px] ${
+                          currentFormat.fontFamily === 'serif'
+                            ? 'font-serif border-b-[0.8px] border-[#243f5b]/40 text-[#59636d]'
+                            : selectedTemplate === 'technical'
+                            ? 'font-mono border-b border-[#aebbc4] text-[#086f83]'
+                            : 'font-mono border-b border-slate-200/80 text-slate-400'
+                        }`}
+                      >
+                        <span className="truncate max-w-[180px]">{title || 'ドキュメント'}</span>
+                        <span className="truncate max-w-[160px] font-medium">
+                          {currentFormat.runningHeader}
+                        </span>
+                      </div>
+                    )}
 
-                    {/* 本文一体型（academic / compact）のタイトルヘッダー */}
-                    {currentFormat.coverType === 'integrated' && (
-                      <div className="mb-6 pb-4 border-b border-slate-200 text-center space-y-2">
-                        <h1
-                          style={{ color: currentFormat.color }}
-                          className="text-xl font-bold tracking-tight"
-                        >
-                          {title || '(タイトル未設定)'}
-                        </h1>
-                        <div className="text-xs text-slate-600 flex items-center justify-center gap-4">
-                          {author && <span>{author}</span>}
-                          {date && <span className="font-mono text-slate-400">{date}</span>}
+                    {/* Compact テンプレート専用の公式上部ヘッダーバー (下線太字 + タイトル + メタデータ) */}
+                    {selectedTemplate === 'compact' && (
+                      <div className="mb-6 pb-3 border-b-[2px] border-[#343a40]">
+                        <div className="flex items-start justify-between gap-4">
+                          <h1 className="text-lg md:text-xl font-bold text-[#202428] leading-tight">
+                            {title || '(タイトル未設定)'}
+                          </h1>
+                          <div className="text-right text-[11px] text-[#596168] shrink-0 font-mono space-y-0.5">
+                            <div>{author || '著者未設定'}</div>
+                            <div>{date || '日付未設定'}</div>
+                          </div>
                         </div>
                       </div>
                     )}
 
                     {/* 目次表示 (tocが有効な場合) */}
                     {toc && (
-                      <div className="mb-8 p-4 bg-slate-50/80 border border-slate-200/70 rounded-xl space-y-2.5">
+                      <div className="mb-6 pb-4 border-b border-slate-200/70 space-y-2">
                         <div
-                          style={{
-                            color: currentFormat.color,
-                            borderBottom: `2px solid ${currentFormat.color}`
-                          }}
-                          className="text-xs font-bold pb-1 flex items-center justify-between"
+                          style={{ color: currentFormat.color }}
+                          className="text-xs font-bold pb-1 flex items-center gap-1.5"
                         >
-                          <span className="flex items-center gap-1.5">
-                            <ListOrdered className="w-3.5 h-3.5" />
-                            目 次
-                          </span>
-                          <span className="text-[10px] font-mono font-normal opacity-70">Table of Contents</span>
+                          <ListOrdered className="w-3.5 h-3.5" />
+                          <span>目 次</span>
                         </div>
 
                         {markdownHeadings.length > 0 ? (
-                          <div className="space-y-1 text-[11px] text-slate-700 font-sans">
-                            {markdownHeadings.slice(0, 7).map((hd, hIdx) => (
+                          <div className="space-y-1 text-[11px]">
+                            {markdownHeadings.slice(0, 6).map((hd, hIdx) => (
                               <div
                                 key={hIdx}
                                 className={`flex items-baseline justify-between ${
                                   hd.level === 1
-                                    ? 'font-bold text-slate-800 pt-0.5'
+                                    ? 'font-medium opacity-90'
                                     : hd.level === 2
-                                    ? 'pl-3 text-slate-700'
-                                    : 'pl-6 text-slate-500'
+                                    ? 'pl-2 opacity-80'
+                                    : 'pl-4 opacity-70'
                                 }`}
                               >
                                 <span className="truncate pr-2">{hd.text}</span>
                                 <div className="flex-1 border-b border-dotted border-slate-300 mx-1 mb-1" />
-                                <span className="font-mono text-[10px] text-slate-400 shrink-0">
+                                <span className="font-mono text-[10px] opacity-60 shrink-0">
                                   {hd.level === 1 ? '1' : hd.level === 2 ? '1' : '2'}
                                 </span>
                               </div>
                             ))}
-                            {markdownHeadings.length > 7 && (
-                              <div className="text-[10px] text-slate-400 pl-3 italic">
-                                ...他 {markdownHeadings.length - 7} 項目
+                            {markdownHeadings.length > 6 && (
+                              <div className="text-[10px] text-slate-400 pl-2 italic">
+                                ...他 {markdownHeadings.length - 6} 項目
                               </div>
                             )}
                           </div>
                         ) : (
                           <div className="text-[11px] text-slate-400 italic py-1">
-                            文書内に見出し（#、##）が存在しません
+                            文書内に見出しが存在しません
                           </div>
                         )}
                       </div>
                     )}
 
-                    {/* 本文段落レンダリング */}
-                    <div className="space-y-4 text-xs leading-relaxed text-slate-700">
-                      {fileData.body.split('\n\n').map((paragraph, idx) => {
-                        const trimmed = paragraph.trim()
-                        if (!trimmed) return null
+                    {/* 本文段落レンダリング (marked による GFM 完全準拠組版) */}
+                    <style>{`
+                      .pfpdf-body-preview h1 {
+                        font-size: 1.15rem;
+                        font-weight: 700;
+                        margin-top: 1.5rem;
+                        margin-bottom: 0.6rem;
+                        line-height: 1.4;
+                        color: ${currentFormat.h1Style.color};
+                        border-bottom: ${currentFormat.h1Style.borderBottom || 'none'};
+                        padding-bottom: ${currentFormat.h1Style.borderBottom ? '0.25rem' : '0'};
+                      }
+                      .pfpdf-body-preview h1:first-child {
+                        margin-top: 0.5rem;
+                      }
+                      .pfpdf-body-preview h2 {
+                        font-size: 0.95rem;
+                        font-weight: 700;
+                        margin-top: 1.25rem;
+                        margin-bottom: 0.5rem;
+                        line-height: 1.4;
+                        color: ${currentFormat.h2Style.color};
+                        border-left: ${currentFormat.h2Style.borderLeft || 'none'};
+                        border-bottom: ${currentFormat.h2Style.borderBottom || 'none'};
+                        padding-left: ${currentFormat.h2Style.borderLeft ? '0.5rem' : '0'};
+                        padding-bottom: ${currentFormat.h2Style.borderBottom ? '0.2rem' : '0'};
+                      }
+                      .pfpdf-body-preview h3 {
+                        font-size: 0.85rem;
+                        font-weight: 700;
+                        margin-top: 1rem;
+                        margin-bottom: 0.4rem;
+                        line-height: 1.4;
+                        color: ${currentFormat.fontFamily === 'serif' ? '#20252b' : '#1e293b'};
+                      }
+                      .pfpdf-body-preview p {
+                        margin-top: 0.6rem;
+                        margin-bottom: 0.6rem;
+                        line-height: ${currentFormat.id === 'book' ? '1.9' : currentFormat.id === 'compact' ? '1.55' : '1.75'};
+                        font-size: 0.8rem;
+                        color: ${currentFormat.fontFamily === 'serif' ? '#292521' : '#334155'};
+                      }
+                      .pfpdf-body-preview ul {
+                        margin-top: 0.5rem;
+                        margin-bottom: 0.5rem;
+                        padding-left: 1.25rem;
+                        list-style-type: disc;
+                        font-size: 0.8rem;
+                        line-height: 1.6;
+                        color: #334155;
+                      }
+                      .pfpdf-body-preview ol {
+                        margin-top: 0.5rem;
+                        margin-bottom: 0.5rem;
+                        padding-left: 1.25rem;
+                        list-style-type: decimal;
+                        font-size: 0.8rem;
+                        line-height: 1.6;
+                        color: #334155;
+                      }
+                      .pfpdf-body-preview li {
+                        margin-top: 0.2rem;
+                        margin-bottom: 0.2rem;
+                      }
+                      .pfpdf-body-preview pre {
+                        background-color: #0f172a;
+                        color: #f8fafc;
+                        padding: 0.75rem 1rem;
+                        border-radius: 0.375rem;
+                        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+                        font-size: 0.72rem;
+                        overflow-x: auto;
+                        margin: 0.75rem 0;
+                        border: 1px solid #1e293b;
+                        line-height: 1.5;
+                      }
+                      .pfpdf-body-preview code:not(pre code) {
+                        background-color: rgba(0, 0, 0, 0.06);
+                        color: #0f5e5a;
+                        padding: 0.15rem 0.35rem;
+                        border-radius: 0.25rem;
+                        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+                        font-size: 0.75rem;
+                      }
+                      .pfpdf-body-preview table {
+                        width: 100%;
+                        border-collapse: collapse;
+                        margin: 1rem 0;
+                        font-size: 0.75rem;
+                      }
+                      .pfpdf-body-preview th {
+                        background-color: ${currentFormat.tableHeaderBg};
+                        color: #ffffff;
+                        font-weight: 600;
+                        padding: 0.4rem 0.6rem;
+                        text-align: left;
+                        border: 1px solid rgba(0, 0, 0, 0.1);
+                      }
+                      .pfpdf-body-preview td {
+                        padding: 0.35rem 0.6rem;
+                        border: 1px solid #e2e8f0;
+                        color: #334155;
+                      }
+                      .pfpdf-body-preview tr:nth-child(even) td {
+                        background-color: rgba(0, 0, 0, 0.02);
+                      }
+                      .pfpdf-body-preview blockquote {
+                        border-left: 3px solid ${currentFormat.color};
+                        padding-left: 0.75rem;
+                        margin: 0.75rem 0;
+                        color: #64748b;
+                        font-style: italic;
+                      }
+                      .pfpdf-body-preview hr {
+                        border: 0;
+                        border-top: 1px solid #e2e8f0;
+                        margin: 1.5rem 0;
+                      }
+                    `}</style>
 
-                        // H1見出し
-                        if (trimmed.startsWith('# ')) {
-                          return (
-                            <h1
-                              key={idx}
-                              style={{
-                                color: currentFormat.h1Style.color,
-                                borderBottom: currentFormat.h1Style.borderBottom
-                              }}
-                              className="text-base font-bold pb-1 mt-6 mb-2"
-                            >
-                              {trimmed.replace(/^#\s+/, '')}
-                            </h1>
-                          )
-                        }
-
-                        // H2見出し
-                        if (trimmed.startsWith('## ')) {
-                          return (
-                            <h2
-                              key={idx}
-                              style={{
-                                color: currentFormat.h2Style.color,
-                                borderLeft: currentFormat.h2Style.borderLeft
-                              }}
-                              className="text-xs font-bold pl-2.5 mt-5 mb-2"
-                            >
-                              {trimmed.replace(/^##\s+/, '')}
-                            </h2>
-                          )
-                        }
-
-                        // H3見出し
-                        if (trimmed.startsWith('### ')) {
-                          return (
-                            <h3
-                              key={idx}
-                              className="text-xs font-bold text-slate-800 mt-4 mb-1 pl-1"
-                            >
-                              {trimmed.replace(/^###\s+/, '')}
-                            </h3>
-                          )
-                        }
-
-                        // Markdown テーブル
-                        const parsedTable = parseMarkdownTable(trimmed)
-                        if (parsedTable) {
-                          return (
-                            <div
-                              key={idx}
-                              className="my-3 overflow-x-auto rounded-lg border border-slate-200 shadow-2xs"
-                            >
-                              <table className="w-full text-left text-[11px] border-collapse">
-                                <thead>
-                                  <tr
-                                    style={{ backgroundColor: currentFormat.tableHeaderBg }}
-                                    className="text-white"
-                                  >
-                                    {parsedTable.headers.map((h, hIdx) => (
-                                      <th key={hIdx} className="px-3 py-1.5 font-bold border-b border-black/10">
-                                        {h}
-                                      </th>
-                                    ))}
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {parsedTable.rows.map((row, rIdx) => (
-                                    <tr
-                                      key={rIdx}
-                                      className={rIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50/70'}
-                                    >
-                                      {row.map((cell, cIdx) => (
-                                        <td
-                                          key={cIdx}
-                                          className="px-3 py-1.5 border-t border-slate-200/60 text-slate-700"
-                                        >
-                                          {cell}
-                                        </td>
-                                      ))}
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          )
-                        }
-
-                        // コードブロック
-                        if (trimmed.startsWith('```')) {
-                          return (
-                            <pre
-                              key={idx}
-                              className="bg-slate-900 text-emerald-400 p-3 rounded-xl font-mono text-[11px] overflow-x-auto shadow-2xs border border-slate-800 my-3"
-                            >
-                              <code>{trimmed.replace(/```[a-z]*\n?/gi, '')}</code>
-                            </pre>
-                          )
-                        }
-
-                        // 箇条書き
-                        if (trimmed.startsWith('* ') || trimmed.startsWith('- ')) {
-                          const items = trimmed.split('\n')
-                          return (
-                            <ul key={idx} className="list-disc list-inside space-y-1 pl-2 text-slate-700">
-                              {items.map((it, iIdx) => (
-                                <li key={iIdx}>{it.replace(/^[*•-]\s+/, '')}</li>
-                              ))}
-                            </ul>
-                          )
-                        }
-
-                        return (
-                          <p key={idx} className="leading-relaxed">
-                            {trimmed}
-                          </p>
-                        )
-                      })}
-                    </div>
+                    <div
+                      className="pfpdf-body-preview"
+                      dangerouslySetInnerHTML={{
+                        __html: marked.parse(fileData.body, { async: false, gfm: true }) as string
+                      }}
+                    />
                   </div>
 
                   {/* 下部ノンブル（ページ番号） */}
                   <div
-                    className={`text-[10px] text-slate-400 font-mono pt-6 pb-2 border-t border-slate-100 flex ${
+                    className={`text-[10px] text-slate-400 font-mono pt-6 pb-2 border-t border-slate-100/80 flex ${
                       currentFormat.pageNumberPos.includes('右')
                         ? 'justify-end'
                         : 'justify-center'
@@ -1344,8 +1578,8 @@ export default function GeneratorView(): React.JSX.Element {
               </div>
             ) : (
               <div className="h-full flex flex-col items-center justify-center text-slate-400 text-xs py-16">
-                <FileText className="w-12 h-12 text-slate-300 mb-2 stroke-1" />
-                <span>Markdown ファイルを読み込むと本文組版プレビューが表示されます</span>
+                <FileText className="w-10 h-10 text-slate-300 mb-2 stroke-1" />
+                <span>Markdown ファイルを読み込むと組版プレビューが表示されます</span>
               </div>
             )
           ) : activeTab === 'raw' ? (
@@ -1356,15 +1590,15 @@ export default function GeneratorView(): React.JSX.Element {
               </div>
             ) : (
               <div className="h-full flex flex-col items-center justify-center text-slate-400 text-xs py-16">
-                <FileText className="w-12 h-12 text-slate-300 mb-2 stroke-1" />
+                <FileText className="w-10 h-10 text-slate-300 mb-2 stroke-1" />
                 <span>Markdown ファイルが読み込まれていません</span>
               </div>
             )
           ) : (
             /* ログコンソール */
-            <div className="bg-slate-950 text-slate-200 rounded-xl p-4 font-mono text-xs h-full min-h-[300px] overflow-y-auto space-y-1 shadow-inner">
+            <div className="bg-[#18181b] text-slate-200 rounded-xl p-4 font-mono text-xs h-full min-h-[300px] overflow-y-auto space-y-1 shadow-inner">
               {logs.length === 0 ? (
-                <div className="text-slate-500 italic">「PDF を生成する」を実行すると、リアルタイムログがここに表示されます...</div>
+                <div className="text-slate-500 italic">「PDF を書き出す」を実行すると、リアルタイムログがここに表示されます...</div>
               ) : (
                 logs.map((log, idx) => (
                   <div key={idx} className="leading-relaxed whitespace-pre-wrap break-all">

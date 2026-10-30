@@ -2,12 +2,11 @@
 import React, { useState, useEffect } from 'react'
 import {
   FileText,
-  Palette,
+  Layers,
   FlaskConical,
   CheckCircle2,
   AlertCircle,
-  X,
-  Sparkles
+  X
 } from 'lucide-react'
 import { AppMode, PfpdfProgressEvent, PdfGenerateResult } from '../../shared/types'
 import GeneratorView from './components/GeneratorView'
@@ -51,11 +50,11 @@ export default function App(): React.JSX.Element {
 
   if (initError) {
     return (
-      <div className="min-h-screen bg-slate-100 flex items-center justify-center p-6 font-sans">
-        <div className="bg-white border-l-4 border-red-500 p-6 rounded-2xl shadow-xl max-w-lg w-full">
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 font-sans">
+        <div className="bg-white border border-slate-200 p-6 rounded-xl shadow-sm max-w-lg w-full">
           <div className="flex items-center gap-3 text-red-600 mb-2">
-            <AlertCircle className="w-6 h-6" />
-            <h1 className="font-bold text-base">初期化エラーが発生しました</h1>
+            <AlertCircle className="w-5 h-5" />
+            <h1 className="font-semibold text-sm">初期化エラーが発生しました</h1>
           </div>
           <p className="text-slate-600 text-xs leading-relaxed">{initError}</p>
         </div>
@@ -64,63 +63,59 @@ export default function App(): React.JSX.Element {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans select-none antialiased">
+    <div className="min-h-screen bg-[#f8f9fa] text-slate-800 flex flex-col font-sans select-none antialiased">
       {/* ナビゲーションバー */}
-      <header className="bg-slate-900 text-white px-6 py-2.5 flex items-center justify-between shadow-md shrink-0 border-b border-slate-800">
+      <header className="bg-white border-b border-slate-200/90 px-6 py-2.5 flex items-center justify-between shrink-0 shadow-2xs">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center shadow-md">
-            <FileText className="w-5 h-5 text-white" />
+          <div className="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center shadow-2xs">
+            <FileText className="w-4 h-4" />
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-base tracking-tight text-white">Pfpdf Studio</span>
-              <span className="text-[10px] bg-orange-500/20 text-orange-300 border border-orange-500/30 px-2 py-0.5 rounded-full font-mono">
-                PPTX連携
-              </span>
-            </div>
-            <p className="text-[10px] text-slate-400">Vivliostyle & Chromium 高品位PDFパブリッシャー</p>
+          <div className="flex items-baseline gap-2">
+            <span className="font-bold text-sm tracking-tight text-slate-900 font-mono">
+              pfpdf studio
+            </span>
+            <span className="text-[10px] text-slate-400 font-mono">v1.0</span>
           </div>
         </div>
 
-        {/* モード切替タブ */}
-        <div className="flex bg-slate-800/90 p-1 rounded-xl border border-slate-700/50">
+        {/* モード切替タブ (セグメントコントロール) */}
+        <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200/70 text-xs">
           <button
             type="button"
             onClick={() => setMode('generator')}
-            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-md transition-all ${
               mode === 'generator'
-                ? 'bg-blue-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'bg-white text-slate-900 font-semibold shadow-2xs'
+                : 'text-slate-500 hover:text-slate-800'
             }`}
           >
-            <Sparkles className="w-3.5 h-3.5" />
-            PDFジェネレーター
+            <FileText className="w-3.5 h-3.5" />
+            PDF 出力
           </button>
           <button
             type="button"
             onClick={() => setMode('builder')}
-            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-md transition-all ${
               mode === 'builder'
-                ? 'bg-orange-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'bg-white text-slate-900 font-semibold shadow-2xs'
+                : 'text-slate-500 hover:text-slate-800'
             }`}
           >
-            <Palette className="w-3.5 h-3.5" />
-            PPTXテンプレート変換
+            <Layers className="w-3.5 h-3.5" />
+            PPTX テンプレート変換
           </button>
         </div>
-
 
         {/* 右側アクション */}
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => setShowTestModal(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-medium border border-slate-700 transition"
-            title="Phase 1 コア疎通テスト"
+            className="flex items-center gap-1.5 px-2.5 py-1 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-md text-xs transition border border-transparent hover:border-slate-200"
+            title="pfpdf コア疎通テスト"
           >
-            <FlaskConical className="w-3.5 h-3.5 text-blue-400" />
-            疎通テスト
+            <FlaskConical className="w-3.5 h-3.5" />
+            <span>疎通テスト</span>
           </button>
         </div>
       </header>
