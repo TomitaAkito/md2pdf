@@ -32,6 +32,10 @@ const pfpdfAPI: PfpdfAPI = {
   },
   parseMarkdownContent: (content: string, fileName: string, filePath?: string) =>
     ipcRenderer.invoke('pfpdf:parse-markdown-content', content, fileName, filePath),
+  saveMarkdownFile: (filePath: string, content: string) =>
+    ipcRenderer.invoke('pfpdf:save-markdown', filePath, content),
+  selectMarkdownSavePath: (defaultFileName?: string) =>
+    ipcRenderer.invoke('pfpdf:select-markdown-save-path', defaultFileName),
   getCustomTemplates: () => ipcRenderer.invoke('pfpdf:get-custom-templates'),
   saveCustomTemplate: (template: CustomTemplateData) => ipcRenderer.invoke('pfpdf:save-custom-template', template),
   deleteCustomTemplate: (templateId: string) => ipcRenderer.invoke('pfpdf:delete-custom-template', templateId),

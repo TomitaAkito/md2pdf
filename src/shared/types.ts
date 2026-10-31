@@ -230,6 +230,8 @@ export interface PfpdfAPI {
   getOfficialTemplates: () => Promise<TemplateInfo[]>;
   getPathForFile: (file: File) => string;
   parseMarkdownContent: (content: string, fileName: string, filePath?: string) => Promise<MarkdownFileData>;
+  saveMarkdownFile: (filePath: string, content: string) => Promise<{ success: boolean; error?: string }>;
+  selectMarkdownSavePath: (defaultFileName?: string) => Promise<string | null>;
 
   // テンプレート関連 API
   getCustomTemplates: () => Promise<CustomTemplateData[]>;

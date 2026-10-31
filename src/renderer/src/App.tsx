@@ -63,7 +63,7 @@ export default function App(): React.JSX.Element {
   }
 
   return (
-    <div className="min-h-screen bg-[#f8f9fa] text-slate-800 flex flex-col font-sans select-none antialiased">
+    <div className="h-screen max-h-screen overflow-hidden bg-[#f8f9fa] text-slate-800 flex flex-col font-sans select-none antialiased">
       {/* ナビゲーションバー */}
       <header className="bg-white border-b border-slate-200/90 px-6 py-2.5 flex items-center justify-between shrink-0 shadow-2xs">
         <div className="flex items-center gap-3">

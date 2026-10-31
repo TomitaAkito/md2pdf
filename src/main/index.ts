@@ -225,6 +225,32 @@ console.log(greet("Pfpdf Studio"));
     }
   )
 
+  ipcMain.handle(
+    'pfpdf:save-markdown',
+    async (_event, filePath: string, content: string): Promise<{ success: boolean; error?: string }> => {
+      try {
+        await fs.promises.writeFile(filePath, content, 'utf-8')
+        return { success: true }
+      } catch (err: any) {
+        return { success: false, error: err.message }
+      }
+    }
+  )
+
+  ipcMain.handle(
+    'pfpdf:select-markdown-save-path',
+    async (_event, defaultFileName?: string): Promise<string | null> => {
+      const defaultPath = join(app.getPath('desktop'), defaultFileName || 'document.md')
+      const result = await dialog.showSaveDialog({
+        title: 'Markdown ファイルの保存先を選択',
+        defaultPath,
+        filters: [{ name: 'Markdown', extensions: ['md', 'markdown'] }]
+      })
+      if (result.canceled) return null
+      return result.filePath
+    }
+  )
+
   ipcMain.handle('pfpdf:select-save-path', async (_event, defaultFileName?: string): Promise<string | null> => {
     const defaultPath = join(app.getPath('desktop'), defaultFileName || 'document.pdf')
     const result = await dialog.showSaveDialog({

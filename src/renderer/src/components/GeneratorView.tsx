@@ -18,7 +18,25 @@ import {
   RotateCcw,
   Palette,
   Eye,
-  Check
+  Check,
+  PenTool,
+  Save,
+  Settings2,
+  Plus,
+  Bold,
+  Italic,
+  Heading1,
+  Heading2,
+  Heading3,
+  List,
+  Code,
+  Quote,
+  Table as TableIcon,
+  FilePlus,
+  ChevronUp,
+  ChevronDown,
+  CheckSquare,
+  Minus
 } from 'lucide-react'
 import {
   MarkdownFileData,
@@ -291,6 +309,121 @@ function extractHeadings(markdown: string): HeadingItem[] {
   return headings
 }
 
+// Notionライクなスラッシュコマンド定義
+interface SlashCommandItem {
+  id: string
+  title: string
+  description: string
+  category: '見出し' | 'リスト' | 'ブロック'
+  icon: React.ReactNode
+  keywords: string[]
+  insertText: string
+  cursorOffset?: number
+}
+
+const SLASH_COMMANDS: SlashCommandItem[] = [
+  {
+    id: 'h1',
+    title: '大見出し (H1)',
+    description: '大きなセクション見出しを作成',
+    category: '見出し',
+    icon: <Heading1 className="w-4 h-4 text-slate-700" />,
+    keywords: ['h1', 'heading1', '見出し', '大見出し', 'タイトル'],
+    insertText: '# '
+  },
+  {
+    id: 'h2',
+    title: '中見出し (H2)',
+    description: 'サブセクションの見出しを作成',
+    category: '見出し',
+    icon: <Heading2 className="w-4 h-4 text-slate-700" />,
+    keywords: ['h2', 'heading2', '見出し', '中見出し'],
+    insertText: '## '
+  },
+  {
+    id: 'h3',
+    title: '小見出し (H3)',
+    description: '項目の小見出しを作成',
+    category: '見出し',
+    icon: <Heading3 className="w-4 h-4 text-slate-700" />,
+    keywords: ['h3', 'heading3', '見出し', '小見出し'],
+    insertText: '### '
+  },
+  {
+    id: 'bullet-list',
+    title: '箇条書きリスト',
+    description: 'シンプルな箇条書きリストを作成',
+    category: 'リスト',
+    icon: <List className="w-4 h-4 text-slate-700" />,
+    keywords: ['list', 'bullet', 'ul', '箇条書き', 'リスト'],
+    insertText: '- '
+  },
+  {
+    id: 'numbered-list',
+    title: '番号付きリスト',
+    description: '順序付きのリストを作成',
+    category: 'リスト',
+    icon: <ListOrdered className="w-4 h-4 text-slate-700" />,
+    keywords: ['number', 'numbered', 'ol', '番号', '数字'],
+    insertText: '1. '
+  },
+  {
+    id: 'todo-list',
+    title: 'ToDo リスト',
+    description: 'チェックボックス付きタスクを作成',
+    category: 'リスト',
+    icon: <CheckSquare className="w-4 h-4 text-slate-700" />,
+    keywords: ['todo', 'task', 'check', 'タスク', 'チェック'],
+    insertText: '- [ ] '
+  },
+  {
+    id: 'quote',
+    title: '引用 (Quote)',
+    description: '目立たせたい引用文を作成',
+    category: 'ブロック',
+    icon: <Quote className="w-4 h-4 text-slate-700" />,
+    keywords: ['quote', '引用', 'コールアウト'],
+    insertText: '> '
+  },
+  {
+    id: 'code-block',
+    title: 'コードブロック',
+    description: 'シンタックス付きコードを記述',
+    category: 'ブロック',
+    icon: <Code className="w-4 h-4 text-slate-700" />,
+    keywords: ['code', 'block', 'コード', 'プログラム'],
+    insertText: '```typescript\n// ここにコードを入力\n```\n',
+    cursorOffset: 14
+  },
+  {
+    id: 'table',
+    title: '表（テーブル）',
+    description: '3列のMarkdownテーブルを挿入',
+    category: 'ブロック',
+    icon: <TableIcon className="w-4 h-4 text-slate-700" />,
+    keywords: ['table', '表', 'テーブル', 'ひょう'],
+    insertText: '| 項目 | 内容 | 備考 |\n| :--- | :--- | :--- |\n| 項目1 | 内容1 | 備考1 |\n| 項目2 | 内容2 | 備考2 |\n\n'
+  },
+  {
+    id: 'pagebreak',
+    title: '改ページ (A4印刷用)',
+    description: 'PDF組版時に強制的に次のページへ送る',
+    category: 'ブロック',
+    icon: <FileText className="w-4 h-4 text-slate-700" />,
+    keywords: ['page', 'pagebreak', 'break', '改ページ', 'ページ区切り'],
+    insertText: '\n<div style="page-break-after: always;"></div>\n\n'
+  },
+  {
+    id: 'divider',
+    title: '区切り線 (水平線)',
+    description: 'セクションを区切る水平線',
+    category: 'ブロック',
+    icon: <Minus className="w-4 h-4 text-slate-700" />,
+    keywords: ['divider', 'hr', 'line', '区切り', '水平線'],
+    insertText: '\n---\n\n'
+  }
+]
+
 export default function GeneratorView(): React.JSX.Element {
   const [fileData, setFileData] = useState<MarkdownFileData | null>(null)
   const [isDragging, setIsDragging] = useState<boolean>(false)
@@ -298,6 +431,28 @@ export default function GeneratorView(): React.JSX.Element {
   const [customTemplatesList, setCustomTemplatesList] = useState<CustomTemplateData[]>([])
   const [selectedTemplate, setSelectedTemplate] = useState<string>('default')
   const [outputPath, setOutputPath] = useState<string>('')
+
+  // エディタ用ステート
+  const [leftTab, setLeftTab] = useState<'editor' | 'settings'>('editor')
+  const [editorText, setEditorText] = useState<string>('')
+  const [isDirty, setIsDirty] = useState<boolean>(false)
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [saveMessage, setSaveMessage] = useState<string>('')
+  const editorRef = useRef<HTMLTextAreaElement>(null)
+
+  // スラッシュコマンド（Notionライクメニュー）用ステート
+  const [slashMenuOpen, setSlashMenuOpen] = useState<boolean>(false)
+  const [slashQuery, setSlashQuery] = useState<string>('')
+  const [slashSelectedIndex, setSlashSelectedIndex] = useState<number>(0)
+  const [slashCoords, setSlashCoords] = useState<{ top: number; left: number }>({ top: 40, left: 20 })
+  const [slashStartIndex, setSlashStartIndex] = useState<number>(-1)
+  const slashMenuRef = useRef<HTMLDivElement>(null)
+
+  // 右カラムプレビューのスクロール管理
+  const previewContainerRef = useRef<HTMLDivElement>(null)
+  const [previewScrollPercent, setPreviewScrollPercent] = useState<number>(0)
+  const scrollTrackRef = useRef<HTMLDivElement>(null)
+  const isDraggingScroll = useRef<boolean>(false)
 
   // フォーム用ステート
   const [title, setTitle] = useState<string>('')
@@ -363,6 +518,9 @@ export default function GeneratorView(): React.JSX.Element {
   // ファイルが読み込まれたときの共通初期化
   const handleFileLoaded = (data: MarkdownFileData) => {
     setFileData(data)
+    setEditorText(data.body)
+    setIsDirty(false)
+    setSaveStatus('idle')
     setTitle(data.frontMatter.title || data.fileName.replace(/\.(md|markdown)$/i, ''))
     setAuthor(data.frontMatter.author || '')
     setDate(data.frontMatter.date || new Date().toISOString().slice(0, 10))
@@ -373,13 +531,395 @@ export default function GeneratorView(): React.JSX.Element {
     }
 
     const defaultPdfName = data.fileName.replace(/\.(md|markdown)$/i, '') + '.pdf'
-    const dir = data.filePath.substring(0, Math.max(data.filePath.lastIndexOf('/'), data.filePath.lastIndexOf('\\')))
-    const separator = data.filePath.includes('\\') ? '\\' : '/'
-    setOutputPath(`${dir}${separator}${defaultPdfName}`)
+    if (data.filePath) {
+      const dir = data.filePath.substring(0, Math.max(data.filePath.lastIndexOf('/'), data.filePath.lastIndexOf('\\')))
+      const separator = data.filePath.includes('\\') ? '\\' : '/'
+      setOutputPath(`${dir}${separator}${defaultPdfName}`)
+    } else {
+      setOutputPath(defaultPdfName)
+    }
 
     setResult(null)
     setLogs([])
+    setLeftTab('editor')
   }
+
+  // 新規ドキュメント作成
+  const handleCreateNew = () => {
+    const today = new Date().toISOString().slice(0, 10)
+    const initialTitle = '無題のドキュメント'
+    const initialBody = `# ${initialTitle}
+
+ここから Markdown を入力できます。
+左カラムでテキストを編集すると、右カラムの A4 組版プレビューにリアルタイムで反映されます。
+
+## 機能紹介
+- **リアルタイム組版**: A4 用紙スタイルで即座にレイアウト確認
+- **見出し自動認識**: 見出しから目次（TOC）を自動生成
+- **ショートカット**: \`Ctrl+S\` で即座に保存
+`
+    const initialData: MarkdownFileData = {
+      filePath: '',
+      fileName: 'untitled.md',
+      content: initialBody,
+      body: initialBody,
+      frontMatter: {
+        title: initialTitle,
+        author: '',
+        date: today,
+        toc: true,
+        template: selectedTemplate || 'default'
+      }
+    }
+    handleFileLoaded(initialData)
+    setIsDirty(true)
+  }
+
+  // スラッシュコマンド候補（検索クエリで絞り込み）
+  const filteredSlashCommands = SLASH_COMMANDS.filter((cmd) => {
+    if (!slashQuery.trim()) return true
+    const q = slashQuery.toLowerCase().trim()
+    return (
+      cmd.title.toLowerCase().includes(q) ||
+      cmd.description.toLowerCase().includes(q) ||
+      cmd.keywords.some((k) => k.toLowerCase().includes(q))
+    )
+  })
+
+  // スラッシュ入力判定
+  const checkSlashTrigger = (text: string, cursorPos: number) => {
+    const textBefore = text.substring(0, cursorPos)
+    const lastNewline = textBefore.lastIndexOf('\n')
+    const currentLine = textBefore.substring(lastNewline + 1)
+
+    const lastSlashInLine = currentLine.lastIndexOf('/')
+    if (lastSlashInLine === -1) {
+      setSlashMenuOpen(false)
+      return
+    }
+
+    // '/' の直前が行頭または空白文字であるかをチェック
+    const charBeforeSlash = lastSlashInLine > 0 ? currentLine[lastSlashInLine - 1] : ''
+    const isValidStart = lastSlashInLine === 0 || /\s/.test(charBeforeSlash)
+    if (!isValidStart) {
+      setSlashMenuOpen(false)
+      return
+    }
+
+    const query = currentLine.substring(lastSlashInLine + 1)
+    if (/\s/.test(query)) {
+      setSlashMenuOpen(false)
+      return
+    }
+
+    const slashIdx = lastNewline + 1 + lastSlashInLine
+    setSlashStartIndex(slashIdx)
+    setSlashQuery((prev) => {
+      if (prev !== query) {
+        setSlashSelectedIndex(0)
+      }
+      return query
+    })
+
+    const lines = textBefore.split('\n')
+    const lineIndex = lines.length - 1
+    const textarea = editorRef.current
+    const scrollTop = textarea ? textarea.scrollTop : 0
+    const lineHeight = 19.5
+    const estimatedTop = (lineIndex + 1) * lineHeight - scrollTop + 14
+    const top = Math.max(10, Math.min(estimatedTop, 280))
+    setSlashCoords({ top, left: 16 })
+    setSlashMenuOpen(true)
+  }
+
+  // スラッシュコマンド実行
+  const executeSlashCommand = (item: SlashCommandItem) => {
+    const textarea = editorRef.current
+    if (!textarea || slashStartIndex === -1) return
+
+    const currentVal = textarea.value
+    const currentCursor = textarea.selectionStart
+
+    const before = currentVal.substring(0, slashStartIndex)
+    const after = currentVal.substring(currentCursor)
+    const newVal = before + item.insertText + after
+
+    setEditorText(newVal)
+    setIsDirty(true)
+    if (fileData) {
+      setFileData((prev) => (prev ? { ...prev, body: newVal } : null))
+    }
+    setSlashMenuOpen(false)
+
+    setTimeout(() => {
+      textarea.focus()
+      const newPos = slashStartIndex + (item.cursorOffset ?? item.insertText.length)
+      textarea.setSelectionRange(newPos, newPos)
+    }, 0)
+  }
+
+  // エディタのテキスト入力時
+  const handleEditorChange = (newBody: string) => {
+    setEditorText(newBody)
+    setIsDirty(true)
+    if (fileData) {
+      setFileData((prev) => {
+        if (!prev) return prev
+        return {
+          ...prev,
+          body: newBody
+        }
+      })
+    }
+    setTimeout(() => {
+      if (editorRef.current) {
+        checkSlashTrigger(newBody, editorRef.current.selectionStart)
+      }
+    }, 0)
+  }
+
+  // 右カラムプレビューのスクロール管理
+  const handlePreviewScroll = () => {
+    if (!previewContainerRef.current) return
+    const { scrollTop, scrollHeight, clientHeight } = previewContainerRef.current
+    const maxScroll = scrollHeight - clientHeight
+    if (maxScroll <= 0) {
+      setPreviewScrollPercent(0)
+    } else {
+      setPreviewScrollPercent(Math.min(100, Math.max(0, Math.round((scrollTop / maxScroll) * 100))))
+    }
+  }
+
+  const scrollToTop = () => {
+    previewContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const scrollToBottom = () => {
+    if (!previewContainerRef.current) return
+    previewContainerRef.current.scrollTo({
+      top: previewContainerRef.current.scrollHeight,
+      behavior: 'smooth'
+    })
+  }
+
+  // 縦型スクロールトラックをクリック＆ドラッグしてプレビューを上下スクロール
+  const handleScrollTrackMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const track = scrollTrackRef.current
+    if (!track || !previewContainerRef.current) return
+
+    const updateScrollByY = (clientY: number) => {
+      const rect = track.getBoundingClientRect()
+      const thumbHeight = 24
+      const trackHeight = rect.height - thumbHeight
+      if (trackHeight <= 0) return
+      const offsetY = clientY - rect.top - thumbHeight / 2
+      const ratio = Math.max(0, Math.min(1, offsetY / trackHeight))
+      const maxScroll = previewContainerRef.current!.scrollHeight - previewContainerRef.current!.clientHeight
+      if (maxScroll > 0) {
+        previewContainerRef.current!.scrollTop = maxScroll * ratio
+      }
+    }
+
+    updateScrollByY(e.clientY)
+    isDraggingScroll.current = true
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!isDraggingScroll.current) return
+      updateScrollByY(moveEvent.clientY)
+    }
+
+    const handleMouseUp = () => {
+      isDraggingScroll.current = false
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+    }
+
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+  }
+
+  // 矢印キーでスラッシュメニューの選択が変わった時、選択項目が見える位置へ自動スクロール
+  useEffect(() => {
+    if (!slashMenuOpen || !slashMenuRef.current) return
+    const selectedEl = slashMenuRef.current.querySelector('[data-selected="true"]') as HTMLElement | null
+    if (selectedEl) {
+      selectedEl.scrollIntoView({ block: 'nearest' })
+    }
+  }, [slashSelectedIndex, slashMenuOpen])
+
+  // Front Matter 統合済みの Markdown テキストを生成
+  const buildFullMarkdownContent = (bodyText: string) => {
+    const frontMatterObj: Record<string, any> = {
+      ...(fileData?.frontMatter || {}),
+      title,
+      author,
+      date,
+      template: selectedTemplate,
+      toc
+    }
+
+    const yamlLines = Object.entries(frontMatterObj)
+      .filter(([_, v]) => v !== undefined && v !== '')
+      .map(([k, v]) => `${k}: ${typeof v === 'string' ? `"${v}"` : v}`)
+
+    return `---\n${yamlLines.join('\n')}\n---\n\n${bodyText}`
+  }
+
+  // 保存処理 (上書き保存 または 別名保存)
+  const handleSaveFile = async (saveAs: boolean = false) => {
+    if (!fileData || !window.pfpdfAPI) return
+
+    let targetPath = fileData.filePath
+    if (!targetPath || saveAs) {
+      const selected = await window.pfpdfAPI.selectMarkdownSavePath(fileData.fileName || 'document.md')
+      if (!selected) return
+      targetPath = selected
+    }
+
+    setSaveStatus('saving')
+    try {
+      const fullContent = buildFullMarkdownContent(editorText)
+      const res = await window.pfpdfAPI.saveMarkdownFile(targetPath, fullContent)
+      if (res.success) {
+        setSaveStatus('saved')
+        setIsDirty(false)
+        const fileName = targetPath.split(/[\\/]/).pop() || 'document.md'
+        setFileData((prev) =>
+          prev
+            ? {
+                ...prev,
+                filePath: targetPath,
+                fileName,
+                content: fullContent,
+                body: editorText
+              }
+            : null
+        )
+        if (!outputPath || saveAs) {
+          const dir = targetPath.substring(0, Math.max(targetPath.lastIndexOf('/'), targetPath.lastIndexOf('\\')))
+          const separator = targetPath.includes('\\') ? '\\' : '/'
+          setOutputPath(`${dir}${separator}${fileName.replace(/\.(md|markdown)$/i, '.pdf')}`)
+        }
+        setSaveMessage('保存しました')
+        setTimeout(() => setSaveStatus('idle'), 2500)
+      } else {
+        setSaveStatus('error')
+        setSaveMessage(res.error || '保存に失敗しました')
+        setTimeout(() => setSaveStatus('idle'), 4000)
+      }
+    } catch (err: any) {
+      setSaveStatus('error')
+      setSaveMessage(err.message || '保存に失敗しました')
+      setTimeout(() => setSaveStatus('idle'), 4000)
+    }
+  }
+
+  // クイック書式挿入
+  const insertFormatting = (prefix: string, suffix: string = '', placeholder: string = '') => {
+    const textarea = editorRef.current
+    if (!textarea) return
+
+    const start = textarea.selectionStart
+    const end = textarea.selectionEnd
+    const currentVal = textarea.value
+    const selected = currentVal.substring(start, end) || placeholder
+
+    const replacement = `${prefix}${selected}${suffix}`
+    const newVal = currentVal.substring(0, start) + replacement + currentVal.substring(end)
+
+    handleEditorChange(newVal)
+
+    setTimeout(() => {
+      textarea.focus()
+      const newStart = start + prefix.length
+      const newEnd = newStart + selected.length
+      textarea.setSelectionRange(newStart, newEnd)
+    }, 0)
+  }
+
+  // エディタキーボード操作 (Tabインデント, Ctrl+S, スラッシュメニューナビゲーション)
+  const handleEditorKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // スラッシュメニューが開いている時のキー操作
+    if (slashMenuOpen && filteredSlashCommands.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        e.stopPropagation()
+        setSlashSelectedIndex((prev) => (prev + 1) % filteredSlashCommands.length)
+        return
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        e.stopPropagation()
+        setSlashSelectedIndex((prev) => (prev - 1 + filteredSlashCommands.length) % filteredSlashCommands.length)
+        return
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        e.stopPropagation()
+        const targetCmd = filteredSlashCommands[slashSelectedIndex]
+        if (targetCmd) {
+          executeSlashCommand(targetCmd)
+        }
+        return
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        e.stopPropagation()
+        setSlashMenuOpen(false)
+        return
+      }
+    }
+
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      e.preventDefault()
+      handleSaveFile(false)
+      return
+    }
+
+    if (e.key === 'Tab') {
+      e.preventDefault()
+      const textarea = e.currentTarget
+      const start = textarea.selectionStart
+      const end = textarea.selectionEnd
+      const val = textarea.value
+      const indent = '  '
+
+      const newVal = val.substring(0, start) + indent + val.substring(end)
+      handleEditorChange(newVal)
+
+      setTimeout(() => {
+        textarea.selectionStart = textarea.selectionEnd = start + indent.length
+      }, 0)
+    }
+  }
+
+  // グローバル Ctrl+S ショートカット
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault()
+        if (fileData) {
+          handleSaveFile(false)
+        }
+      }
+    }
+    window.addEventListener('keydown', handleGlobalKeyDown)
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown)
+  }, [fileData, editorText, title, author, date, selectedTemplate, toc, outputPath])
+
+  // スラッシュメニュー外部クリックで閉じる
+  useEffect(() => {
+    if (!slashMenuOpen) return
+    const handleClickOutside = (e: MouseEvent) => {
+      if (slashMenuRef.current && !slashMenuRef.current.contains(e.target as Node)) {
+        setSlashMenuOpen(false)
+      }
+    }
+    window.addEventListener('mousedown', handleClickOutside)
+    return () => window.removeEventListener('mousedown', handleClickOutside)
+  }, [slashMenuOpen])
 
   // ファイルダイアログ選択
   const handleSelectFile = async () => {
@@ -870,348 +1410,678 @@ export default function GeneratorView(): React.JSX.Element {
   }
 
   return (
-    <div className="flex-1 flex flex-col md:flex-row gap-5 p-6 max-w-7xl mx-auto w-full overflow-hidden select-none">
-      {/* 左カラム: 入力・設定・アクション */}
-      <div className="w-full md:w-[46%] flex flex-col gap-4 overflow-y-auto pr-1">
-        {/* ファイル読み込みドロップゾーン */}
+    <div className="flex-1 flex flex-col md:flex-row gap-5 p-5 max-w-7xl mx-auto w-full h-full max-h-full overflow-hidden select-none">
+      {/* 左カラム: Markdown エディタ / 文書設定 */}
+      <div className="w-full md:w-1/2 flex flex-col gap-3 overflow-hidden h-full">
+        {/* ファイル未読み込み時: ドロップゾーン ＆ 新規作成ボタン */}
         {!fileData ? (
-          <div
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            onClick={handleSelectFile}
-            className={`border border-dashed rounded-xl p-8 flex flex-col items-center justify-center text-center cursor-pointer transition-colors duration-150 group bg-white shadow-2xs ${
-              isDragging
-                ? 'border-slate-800 bg-slate-50'
-                : 'border-slate-300 hover:border-slate-400 hover:bg-slate-50/50'
-            }`}
-          >
-            <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500 mb-3 group-hover:text-slate-800 transition-colors pointer-events-none">
-              <Upload className="w-5 h-5 stroke-[1.75]" />
-            </div>
-            <h3 className="text-xs font-semibold text-slate-800 mb-1 pointer-events-none">
-              Markdown ファイルをドラッグ＆ドロップ
-            </h3>
-            <p className="text-[11px] text-slate-400 mb-3 pointer-events-none">
-              または、クリックしてファイルを選択
-            </p>
-            <button
-              type="button"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-medium shadow-2xs transition pointer-events-none"
+          <div className="flex flex-col gap-3 my-auto">
+            <div
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onClick={handleSelectFile}
+              className={`border border-dashed rounded-xl p-8 flex flex-col items-center justify-center text-center cursor-pointer transition-colors duration-150 group bg-white shadow-2xs ${
+                isDragging
+                  ? 'border-slate-800 bg-slate-50'
+                  : 'border-slate-300 hover:border-slate-400 hover:bg-slate-50/50'
+              }`}
             >
-              <FolderOpen className="w-3.5 h-3.5" />
-              ファイルを選択 (.md)
-            </button>
+              <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500 mb-3 group-hover:text-slate-800 transition-colors pointer-events-none">
+                <Upload className="w-5 h-5 stroke-[1.75]" />
+              </div>
+              <h3 className="text-xs font-semibold text-slate-800 mb-1 pointer-events-none">
+                Markdown ファイルをドラッグ＆ドロップ
+              </h3>
+              <p className="text-[11px] text-slate-400 mb-3 pointer-events-none">
+                または、クリックしてファイルを選択
+              </p>
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-medium shadow-2xs transition pointer-events-none"
+              >
+                <FolderOpen className="w-3.5 h-3.5" />
+                ファイルを選択 (.md)
+              </button>
+            </div>
+
+            {/* 新規ドキュメント作成カード */}
+            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs flex items-center justify-between">
+              <div>
+                <div className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
+                  <FilePlus className="w-4 h-4 text-slate-600" />
+                  新規ドキュメントを作成
+                </div>
+                <div className="text-[11px] text-slate-400 mt-0.5">
+                  白紙から直接 Markdown を執筆・プレビューできます
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleCreateNew}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg text-xs font-medium border border-slate-200 transition cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                新規作成
+              </button>
+            </div>
           </div>
         ) : (
-          /* 読み込み済みファイルカード */
-          <div
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            className={`bg-white border rounded-xl p-3.5 shadow-2xs flex items-center justify-between transition-colors ${
-              isDragging ? 'border-slate-800 bg-slate-50' : 'border-slate-200'
-            }`}
-          >
-            <div className="flex items-center gap-3 overflow-hidden pointer-events-none">
-              <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600 shrink-0">
-                <FileCode className="w-4 h-4" />
-              </div>
-              <div className="truncate">
-                <div className="text-xs font-semibold text-slate-800 truncate flex items-center gap-2">
-                  <span>{fileData.fileName}</span>
-                  {fileData.frontMatter.template && (
-                    <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.2 rounded font-mono">
-                      指定: {fileData.frontMatter.template}
-                    </span>
-                  )}
-                </div>
-                <div className="text-[11px] text-slate-400 font-mono truncate">{fileData.filePath}</div>
-              </div>
-            </div>
-            <div className="flex items-center gap-1.5 shrink-0">
-              <button
-                onClick={handleSelectFile}
-                className="text-xs text-slate-600 hover:text-slate-900 font-medium px-2 py-1 rounded hover:bg-slate-100 transition"
-              >
-                変更
-              </button>
-              <button
-                onClick={() => setFileData(null)}
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-md hover:bg-slate-100 transition"
-                title="閉じる"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Front Matter & 設定フォーム */}
-        {fileData && (
-          <>
-            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs space-y-3.5">
-              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                <div className="flex items-center gap-2 text-slate-900 font-semibold text-xs">
-                  <FileText className="w-3.5 h-3.5 text-slate-500" />
-                  <span>文書情報 (メタデータ)</span>
-                </div>
-                <span className="text-[11px] text-slate-400">PDF表紙・ヘッダーに反映</span>
-              </div>
-
-              {/* タイトル */}
-              <div>
-                <label className="block text-[11px] font-medium text-slate-600 mb-1">
-                  文書タイトル (title)
-                </label>
-                <input
-                  type="text"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="例: プロジェクト仕様書"
-                  className="w-full px-3 py-1.5 text-xs text-slate-800 border border-slate-200 rounded-lg focus:outline-none focus:border-slate-800 focus:ring-1 focus:ring-slate-800 transition"
-                />
-              </div>
-
-              {/* 著者 & 日付 */}
-              <div className="grid grid-cols-2 gap-2.5">
-                <div>
-                  <label className="block text-[11px] font-medium text-slate-600 mb-1 flex items-center gap-1">
-                    <User className="w-3 h-3 text-slate-400" />
-                    著者 (author)
-                  </label>
-                  <input
-                    type="text"
-                    value={author}
-                    onChange={(e) => setAuthor(e.target.value)}
-                    placeholder="例: 開発チーム"
-                    className="w-full px-3 py-1.5 text-xs text-slate-800 border border-slate-200 rounded-lg focus:outline-none focus:border-slate-800 focus:ring-1 focus:ring-slate-800 transition"
-                  />
-                </div>
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-[11px] font-medium text-slate-600 flex items-center gap-1">
-                      <Calendar className="w-3 h-3 text-slate-400" />
-                      日付 (date)
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setDate(new Date().toISOString().slice(0, 10))}
-                      className="text-[10px] text-slate-500 hover:text-slate-900 hover:underline flex items-center gap-0.5"
-                    >
-                      <RotateCcw className="w-2.5 h-2.5" /> 今日
-                    </button>
+          <div className="flex flex-col gap-2.5 h-full overflow-hidden">
+            {/* 上部ファイル操作バー & モード切り替え */}
+            <div className="bg-white border border-slate-200 rounded-xl p-2.5 shadow-2xs flex flex-col gap-2 shrink-0">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 overflow-hidden">
+                  <div className="w-7 h-7 rounded-md bg-slate-100 flex items-center justify-center text-slate-600 shrink-0">
+                    <FileCode className="w-3.5 h-3.5" />
                   </div>
-                  <input
-                    type="date"
-                    value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                    className="w-full px-3 py-1.5 text-xs text-slate-800 border border-slate-200 rounded-lg focus:outline-none focus:border-slate-800 focus:ring-1 focus:ring-slate-800 transition font-mono"
-                  />
-                </div>
-              </div>
-
-              {/* 目次トグル */}
-              <div className="flex items-center justify-between pt-1 border-t border-slate-100">
-                <div className="flex items-center gap-2">
-                  <ListOrdered className="w-3.5 h-3.5 text-slate-400" />
-                  <div>
-                    <span className="text-xs font-medium text-slate-700 block">目次の自動生成 (toc)</span>
-                    <span className="text-[10px] text-slate-400 block">本文見出しから目次ページを自動挿入</span>
-                  </div>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={toc}
-                    onChange={(e) => setToc(e.target.checked)}
-                    className="sr-only peer"
-                  />
-                  <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-slate-900"></div>
-                </label>
-              </div>
-            </div>
-
-            {/* テンプレート選択 */}
-            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs space-y-3">
-              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                <div className="flex items-center gap-2 text-slate-900 font-semibold text-xs">
-                  <BookOpen className="w-3.5 h-3.5 text-slate-500" />
-                  <span>適用テンプレート</span>
-                </div>
-                <span className="text-[11px] text-slate-500 font-mono">
-                  選択中: <strong className="text-slate-900 font-semibold">{currentFormat.name}</strong>
-                </span>
-              </div>
-
-              {/* テンプレート一覧グリッド (洗練されたミニマルカード) */}
-              <div className="grid grid-cols-2 gap-2">
-                {templates.map((tpl) => {
-                  const isSelected = selectedTemplate === tpl.id
-                  const detail = TEMPLATE_DETAILS[tpl.id] || {
-                    color: tpl.id.startsWith('custom-') ? '#ea580c' : '#0f5e5a',
-                    layoutName: tpl.category === 'custom' ? '自作 (PPTX)' : '標準レポート',
-                    badge: tpl.category === 'custom' ? '自作PPTX' : '公式'
-                  }
-
-                  return (
-                    <button
-                      key={tpl.id}
-                      type="button"
-                      onClick={() => setSelectedTemplate(tpl.id)}
-                      className={`text-left p-2.5 rounded-lg border transition-all duration-150 relative ${
-                        isSelected
-                          ? 'border-slate-900 bg-slate-50/70 ring-1 ring-slate-900 shadow-2xs'
-                          : 'border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50/40'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between mb-1">
-                        <div className="flex items-center gap-1.5 truncate">
-                          <span
-                            className="w-2 h-2 rounded-full shrink-0"
-                            style={{ backgroundColor: detail.color }}
-                          />
-                          <span className="text-xs font-semibold text-slate-900 truncate">
-                            {tpl.name}
-                          </span>
-                        </div>
-                        {isSelected && <Check className="w-3 h-3 text-slate-900 shrink-0" />}
-                      </div>
-
-                      <p className="text-[10px] text-slate-500 line-clamp-1 leading-normal">
-                        {detail.layoutName}
-                      </p>
-                    </button>
-                  )
-                })}
-              </div>
-
-              {/* 選択中テンプレートの仕様スペックサマリー */}
-              <div className="p-3 bg-slate-50/70 rounded-lg border border-slate-200/70 space-y-2 text-xs">
-                <div className="flex items-center justify-between text-slate-700 font-medium pb-1.5 border-b border-slate-200/60 text-[11px]">
-                  <div className="flex items-center gap-1.5">
-                    <Palette className="w-3.5 h-3.5 text-slate-500" />
-                    <span>【{currentFormat.name}】 仕様サマリー</span>
-                  </div>
-                  <span className="font-mono text-[10px] text-slate-500">
-                    A4 縦
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
-                  <div>
-                    <span className="text-slate-400">表紙形式: </span>
-                    <span className="text-slate-700 font-medium">{currentFormat.coverTypeName}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400">テーマ色: </span>
-                    <span className="font-mono text-slate-700 font-medium inline-flex items-center gap-1">
-                      <span
-                        className="w-2 h-2 rounded-full inline-block"
-                        style={{ backgroundColor: currentFormat.color }}
-                      />
-                      {currentFormat.color}
-                    </span>
-                  </div>
-                  <div className="col-span-2">
-                    <span className="text-slate-400">書体: </span>
-                    <span className="text-slate-700">{currentFormat.fontName}</span>
-                  </div>
-                  <div className="col-span-2">
-                    <span className="text-slate-400">推奨用途: </span>
-                    <span className="text-slate-700">{currentFormat.bestFor}</span>
+                  <div className="truncate">
+                    <div className="text-xs font-semibold text-slate-800 truncate flex items-center gap-1.5">
+                      <span className="truncate">{fileData.fileName || 'untitled.md'}</span>
+                      {isDirty && (
+                        <span className="inline-flex items-center gap-1 text-[10px] text-amber-700 bg-amber-50 px-1.5 py-0.2 rounded font-medium border border-amber-200/60">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                          未保存
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
 
-                {/* スタイル見本（H1 / H2 / 表ヘッダー） */}
-                <div className="pt-2 border-t border-slate-200/60 flex items-center gap-3 text-[11px]">
-                  <div className="flex items-center gap-1">
-                    <span className="text-slate-400 text-[10px]">H1:</span>
-                    <span
-                      style={{
-                        color: currentFormat.h1Style.color,
-                        borderBottom: currentFormat.h1Style.borderBottom
-                      }}
-                      className="font-bold text-[10px] px-1"
-                    >
-                      大見出し
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <span className="text-slate-400 text-[10px]">H2:</span>
-                    <span
-                      style={{
-                        color: currentFormat.h2Style.color,
-                        borderLeft: currentFormat.h2Style.borderLeft
-                      }}
-                      className="font-bold text-[10px] pl-1"
-                    >
-                      中見出し
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <span className="text-slate-400 text-[10px]">表:</span>
-                    <span
-                      style={{ backgroundColor: currentFormat.tableHeaderBg }}
-                      className="text-white text-[9px] px-1.5 py-0.2 rounded font-medium"
-                    >
-                      項目
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* 出力先 & PDF生成ボタン */}
-            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs space-y-3">
-              <div>
-                <label className="block text-[11px] font-medium text-slate-600 mb-1">
-                  出力先 PDF ファイルパス
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={outputPath}
-                    onChange={(e) => setOutputPath(e.target.value)}
-                    placeholder="C:\Users\...\output.pdf"
-                    className="flex-1 px-3 py-1.5 text-xs font-mono border border-slate-200 rounded-lg focus:outline-none focus:border-slate-800 focus:ring-1 focus:ring-slate-800 transition"
-                  />
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {/* 保存ボタン (Ctrl+S) */}
                   <button
                     type="button"
-                    onClick={handleSelectOutputPath}
-                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium border border-slate-200 transition shrink-0"
+                    onClick={() => handleSaveFile(false)}
+                    disabled={saveStatus === 'saving'}
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition cursor-pointer ${
+                      isDirty
+                        ? 'bg-slate-900 hover:bg-slate-800 text-white shadow-2xs'
+                        : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                    }`}
+                    title="上書き保存 (Ctrl+S / Cmd+S)"
                   >
-                    参照...
+                    {saveStatus === 'saving' ? (
+                      <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                    ) : saveStatus === 'saved' ? (
+                      <Check className="w-3 h-3 text-emerald-500" />
+                    ) : (
+                      <Save className="w-3 h-3" />
+                    )}
+                    <span>{saveStatus === 'saved' ? '保存済' : '保存'}</span>
+                    <span className="text-[10px] opacity-60 font-mono hidden sm:inline">Ctrl+S</span>
+                  </button>
+
+                  {/* 別名で保存 */}
+                  <button
+                    type="button"
+                    onClick={() => handleSaveFile(true)}
+                    className="text-[11px] text-slate-600 hover:text-slate-900 px-2 py-1 rounded hover:bg-slate-100 transition cursor-pointer"
+                    title="名前を付けて保存"
+                  >
+                    別名保存
+                  </button>
+
+                  {/* ファイル変更 */}
+                  <button
+                    type="button"
+                    onClick={handleSelectFile}
+                    className="text-[11px] text-slate-600 hover:text-slate-900 px-2 py-1 rounded hover:bg-slate-100 transition cursor-pointer"
+                    title="別のファイルを開く"
+                  >
+                    開く
+                  </button>
+
+                  {/* 閉じる */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isDirty && !confirm('未保存の変更があります。閉じてもよろしいですか？')) return
+                      setFileData(null)
+                    }}
+                    className="text-slate-400 hover:text-slate-600 p-1 rounded-md hover:bg-slate-100 transition cursor-pointer"
+                    title="閉じる"
+                  >
+                    <X className="w-3.5 h-3.5" />
                   </button>
                 </div>
               </div>
 
-              {/* PDF書き出しボタン */}
-              <button
-                type="button"
-                onClick={handleGenerate}
-                disabled={isGenerating || !fileData || !outputPath}
-                className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white rounded-lg text-xs font-medium shadow-2xs transition flex items-center justify-center gap-2 cursor-pointer"
-              >
-                {isGenerating ? (
-                  <>
-                    <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    <span>PDF をレンダリング中...</span>
-                  </>
-                ) : (
-                  <>
-                    <FileDown className="w-4 h-4" />
-                    <span>PDF を書き出す</span>
-                  </>
-                )}
-              </button>
+              {/* モード切り替えタブ (セグメントコントロール) */}
+              <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200/70 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setLeftTab('editor')}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-1 rounded-md transition-all cursor-pointer ${
+                    leftTab === 'editor'
+                      ? 'bg-white text-slate-900 font-semibold shadow-2xs'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  <PenTool className="w-3.5 h-3.5" />
+                  Markdown 編集
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLeftTab('settings')}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-1 rounded-md transition-all cursor-pointer ${
+                    leftTab === 'settings'
+                      ? 'bg-white text-slate-900 font-semibold shadow-2xs'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  <Settings2 className="w-3.5 h-3.5" />
+                  文書設定・テンプレート
+                </button>
+              </div>
             </div>
-          </>
+
+            {/* モード 1: Markdown エディタ */}
+            {leftTab === 'editor' && (
+              <div className="bg-white border border-slate-200 rounded-xl shadow-2xs flex-1 flex flex-col overflow-hidden min-h-[440px]">
+                {/* クイック書式ツールバー */}
+                <div className="border-b border-slate-200/90 p-1.5 bg-slate-50/70 flex flex-wrap items-center gap-1 text-slate-700 shrink-0">
+                  <div className="flex items-center gap-0.5 pr-1.5 border-r border-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => insertFormatting('# ', '', '大見出し')}
+                      className="p-1 rounded hover:bg-slate-200 text-slate-700 transition cursor-pointer"
+                      title="見出し 1 (# )"
+                    >
+                      <Heading1 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => insertFormatting('## ', '', '中見出し')}
+                      className="p-1 rounded hover:bg-slate-200 text-slate-700 transition cursor-pointer"
+                      title="見出し 2 (## )"
+                    >
+                      <Heading2 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => insertFormatting('### ', '', '小見出し')}
+                      className="p-1 rounded hover:bg-slate-200 text-slate-700 transition cursor-pointer"
+                      title="見出し 3 (### )"
+                    >
+                      <Heading3 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-0.5 px-1.5 border-r border-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => insertFormatting('**', '**', '太字')}
+                      className="p-1 rounded hover:bg-slate-200 text-slate-700 transition cursor-pointer"
+                      title="太字 (**テキスト**)"
+                    >
+                      <Bold className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => insertFormatting('*', '*', '斜体')}
+                      className="p-1 rounded hover:bg-slate-200 text-slate-700 transition cursor-pointer"
+                      title="斜体 (*テキスト*)"
+                    >
+                      <Italic className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => insertFormatting('`', '`', 'code')}
+                      className="p-1 rounded hover:bg-slate-200 text-slate-700 transition cursor-pointer"
+                      title="インラインコード (`code`)"
+                    >
+                      <Code className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-0.5 px-1.5 border-r border-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => insertFormatting('- ', '', 'リスト項目')}
+                      className="p-1 rounded hover:bg-slate-200 text-slate-700 transition cursor-pointer"
+                      title="箇条書き (- )"
+                    >
+                      <List className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => insertFormatting('1. ', '', '項目 1')}
+                      className="p-1 rounded hover:bg-slate-200 text-slate-700 transition cursor-pointer"
+                      title="番号付きリスト (1. )"
+                    >
+                      <ListOrdered className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => insertFormatting('> ', '', '引用テキスト')}
+                      className="p-1 rounded hover:bg-slate-200 text-slate-700 transition cursor-pointer"
+                      title="引用 (> )"
+                    >
+                      <Quote className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-0.5 pl-1.5">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        insertFormatting(
+                          '\n| 項目 | 内容 | 備考 |\n| :--- | :--- | :--- |\n| 項目A | 内容A | 備考A |\n| 項目B | 内容B | 備考B |\n\n',
+                          '',
+                          ''
+                        )
+                      }
+                      className="p-1 rounded hover:bg-slate-200 text-slate-700 transition cursor-pointer"
+                      title="表（テーブル）挿入"
+                    >
+                      <TableIcon className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        insertFormatting('```typescript\n', '\n```\n', '// コード')
+                      }
+                      className="px-1.5 py-0.5 rounded hover:bg-slate-200 text-slate-700 font-mono text-[11px] transition cursor-pointer"
+                      title="コードブロック (```)"
+                    >
+                      ```
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        insertFormatting('\n\n<div style="page-break-after: always;"></div>\n\n', '', '')
+                      }
+                      className="px-1.5 py-0.5 rounded hover:bg-slate-200 text-slate-600 text-[10px] font-medium transition cursor-pointer"
+                      title="改ページタグ挿入"
+                    >
+                      改ページ
+                    </button>
+                  </div>
+                </div>
+
+                {/* textarea 入力エリア */}
+                <div className="relative flex-1 flex flex-col min-h-0">
+                  <textarea
+                    ref={editorRef}
+                    value={editorText}
+                    onChange={(e) => handleEditorChange(e.target.value)}
+                    onKeyDown={handleEditorKeyDown}
+                    onClick={() => {
+                      if (editorRef.current) {
+                        checkSlashTrigger(editorRef.current.value, editorRef.current.selectionStart)
+                      }
+                    }}
+                    onKeyUp={(e) => {
+                      if (
+                        ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter', 'Escape', 'Tab', 'Shift', 'Control', 'Alt'].includes(
+                          e.key
+                        )
+                      ) {
+                        return
+                      }
+                      if (editorRef.current) {
+                        checkSlashTrigger(editorRef.current.value, editorRef.current.selectionStart)
+                      }
+                    }}
+                    placeholder="Markdown を入力してください... [/] を入力すると Notion 風にブロック・書式を選択できます。"
+                    spellCheck={false}
+                    className="w-full flex-1 p-3.5 font-mono text-xs leading-relaxed text-slate-800 bg-white resize-none focus:outline-none placeholder:text-slate-300 overflow-y-auto"
+                  />
+
+                  {/* Notion 風 スラッシュコマンドメニュー */}
+                  {slashMenuOpen && filteredSlashCommands.length > 0 && (
+                    <div
+                      ref={slashMenuRef}
+                      style={{
+                        top: `${slashCoords.top}px`,
+                        left: `${slashCoords.left}px`
+                      }}
+                      className="absolute z-50 w-72 max-h-72 bg-white rounded-xl shadow-xl border border-slate-200 overflow-y-auto p-1.5 preview-scrollbar select-none"
+                    >
+                      <div className="px-2 py-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center justify-between border-b border-slate-100 mb-1">
+                        <span>ブロックを選択</span>
+                        {slashQuery && (
+                          <span className="font-mono text-slate-600 bg-slate-100 px-1 rounded">/{slashQuery}</span>
+                        )}
+                      </div>
+
+                      <div className="space-y-0.5">
+                        {filteredSlashCommands.map((cmd, idx) => {
+                          const isSelected = idx === slashSelectedIndex
+                          return (
+                            <button
+                              key={cmd.id}
+                              type="button"
+                              data-selected={isSelected}
+                              onClick={() => executeSlashCommand(cmd)}
+                              onMouseEnter={() => setSlashSelectedIndex(idx)}
+                              className={`w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-left transition-colors cursor-pointer ${
+                                isSelected
+                                  ? 'bg-slate-100 text-slate-900 ring-1 ring-slate-300'
+                                  : 'text-slate-700 hover:bg-slate-50'
+                              }`}
+                            >
+                              <div
+                                className={`w-6 h-6 rounded flex items-center justify-center shrink-0 border ${
+                                  isSelected
+                                    ? 'bg-white border-slate-300 text-slate-900 shadow-2xs'
+                                    : 'bg-slate-50 border-slate-200 text-slate-600'
+                                }`}
+                              >
+                                {cmd.icon}
+                              </div>
+                              <div className="truncate flex-1">
+                                <div className="text-xs font-semibold leading-tight text-slate-900">
+                                  {cmd.title}
+                                </div>
+                                <div className="text-[10px] text-slate-400 truncate leading-tight mt-0.5">
+                                  {cmd.description}
+                                </div>
+                              </div>
+                            </button>
+                          )
+                        })}
+                      </div>
+
+                      <div className="mt-1 pt-1 border-t border-slate-100 px-2 py-0.5 flex items-center justify-between text-[9px] text-slate-400 font-mono">
+                        <span>↑↓ 選択</span>
+                        <span>Enter 決定</span>
+                        <span>Esc 閉じる</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* エディタ下部ステータスバー */}
+                <div className="border-t border-slate-200/90 px-3 py-2 bg-slate-50 flex items-center justify-between text-xs text-slate-500 shrink-0">
+                  <div className="flex items-center gap-3 text-[11px]">
+                    <span className="font-mono">
+                      {editorText ? editorText.split('\n').length : 0} 行
+                    </span>
+                    <span className="text-slate-300">|</span>
+                    <span className="font-mono">
+                      {editorText.length.toLocaleString()} 文字
+                    </span>
+                    <span className="text-slate-300">|</span>
+                    <span className="text-[10px] bg-slate-100 text-slate-600 font-mono px-1.5 py-0.2 rounded border border-slate-200/60">
+                      [/] コマンド
+                    </span>
+                    {saveMessage && (
+                      <span className="text-emerald-600 font-medium ml-1 flex items-center gap-1">
+                        <Check className="w-3 h-3" />
+                        {saveMessage}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      リアルタイム組版同期
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleGenerate}
+                      disabled={isGenerating || !fileData || !outputPath}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white rounded-md text-xs font-medium transition cursor-pointer shadow-2xs"
+                    >
+                      <FileDown className="w-3 h-3" />
+                      <span>PDF出力</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* モード 2: 文書設定・テンプレート */}
+            {leftTab === 'settings' && (
+              <div className="flex flex-col gap-3 overflow-y-auto flex-1 pr-0.5">
+                {/* メタデータ設定 */}
+                <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs space-y-3.5">
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                    <div className="flex items-center gap-2 text-slate-900 font-semibold text-xs">
+                      <FileText className="w-3.5 h-3.5 text-slate-500" />
+                      <span>文書情報 (メタデータ)</span>
+                    </div>
+                    <span className="text-[11px] text-slate-400">PDF表紙・ヘッダーに反映</span>
+                  </div>
+
+                  {/* タイトル */}
+                  <div>
+                    <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                      文書タイトル (title)
+                    </label>
+                    <input
+                      type="text"
+                      value={title}
+                      onChange={(e) => {
+                        setTitle(e.target.value)
+                        setIsDirty(true)
+                      }}
+                      placeholder="例: プロジェクト仕様書"
+                      className="w-full px-3 py-1.5 text-xs text-slate-800 border border-slate-200 rounded-lg focus:outline-none focus:border-slate-800 focus:ring-1 focus:ring-slate-800 transition"
+                    />
+                  </div>
+
+                  {/* 著者 & 日付 */}
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-[11px] font-medium text-slate-600 mb-1 flex items-center gap-1">
+                        <User className="w-3 h-3 text-slate-400" />
+                        著者 (author)
+                      </label>
+                      <input
+                        type="text"
+                        value={author}
+                        onChange={(e) => {
+                          setAuthor(e.target.value)
+                          setIsDirty(true)
+                        }}
+                        placeholder="例: 開発チーム"
+                        className="w-full px-3 py-1.5 text-xs text-slate-800 border border-slate-200 rounded-lg focus:outline-none focus:border-slate-800 focus:ring-1 focus:ring-slate-800 transition"
+                      />
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-[11px] font-medium text-slate-600 flex items-center gap-1">
+                          <Calendar className="w-3 h-3 text-slate-400" />
+                          日付 (date)
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDate(new Date().toISOString().slice(0, 10))
+                            setIsDirty(true)
+                          }}
+                          className="text-[10px] text-slate-500 hover:text-slate-900 hover:underline flex items-center gap-0.5 cursor-pointer"
+                        >
+                          <RotateCcw className="w-2.5 h-2.5" /> 今日
+                        </button>
+                      </div>
+                      <input
+                        type="date"
+                        value={date}
+                        onChange={(e) => {
+                          setDate(e.target.value)
+                          setIsDirty(true)
+                        }}
+                        className="w-full px-3 py-1.5 text-xs text-slate-800 border border-slate-200 rounded-lg focus:outline-none focus:border-slate-800 focus:ring-1 focus:ring-slate-800 transition font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  {/* 目次トグル */}
+                  <div className="flex items-center justify-between pt-1 border-t border-slate-100">
+                    <div className="flex items-center gap-2">
+                      <ListOrdered className="w-3.5 h-3.5 text-slate-400" />
+                      <div>
+                        <span className="text-xs font-medium text-slate-700 block">目次の自動生成 (toc)</span>
+                        <span className="text-[10px] text-slate-400 block">本文見出しから目次ページを自動挿入</span>
+                      </div>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={toc}
+                        onChange={(e) => {
+                          setToc(e.target.checked)
+                          setIsDirty(true)
+                        }}
+                        className="sr-only peer"
+                      />
+                      <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-slate-900"></div>
+                    </label>
+                  </div>
+                </div>
+
+                {/* テンプレート選択 */}
+                <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs space-y-3">
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                    <div className="flex items-center gap-2 text-slate-900 font-semibold text-xs">
+                      <BookOpen className="w-3.5 h-3.5 text-slate-500" />
+                      <span>適用テンプレート</span>
+                    </div>
+                    <span className="text-[11px] text-slate-500 font-mono">
+                      選択中: <strong className="text-slate-900 font-semibold">{currentFormat.name}</strong>
+                    </span>
+                  </div>
+
+                  {/* テンプレート一覧グリッド */}
+                  <div className="grid grid-cols-2 gap-2">
+                    {templates.map((tpl) => {
+                      const isSelected = selectedTemplate === tpl.id
+                      const detail = TEMPLATE_DETAILS[tpl.id] || {
+                        color: tpl.id.startsWith('custom-') ? '#ea580c' : '#0f5e5a',
+                        layoutName: tpl.category === 'custom' ? '自作 (PPTX)' : '標準レポート',
+                        badge: tpl.category === 'custom' ? '自作PPTX' : '公式'
+                      }
+
+                      return (
+                        <button
+                          key={tpl.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedTemplate(tpl.id)
+                            setIsDirty(true)
+                          }}
+                          className={`text-left p-2.5 rounded-lg border transition-all duration-150 relative cursor-pointer ${
+                            isSelected
+                              ? 'border-slate-900 bg-slate-50/70 ring-1 ring-slate-900 shadow-2xs'
+                              : 'border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50/40'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <div className="flex items-center gap-1.5 truncate">
+                              <span
+                                className="w-2 h-2 rounded-full shrink-0"
+                                style={{ backgroundColor: detail.color }}
+                              />
+                              <span className="text-xs font-semibold text-slate-900 truncate">
+                                {tpl.name}
+                              </span>
+                            </div>
+                            {isSelected && <Check className="w-3 h-3 text-slate-900 shrink-0" />}
+                          </div>
+
+                          <p className="text-[10px] text-slate-500 line-clamp-1 leading-normal">
+                            {detail.layoutName}
+                          </p>
+                        </button>
+                      )
+                    })}
+                  </div>
+
+                  {/* 選択中テンプレートの仕様スペックサマリー */}
+                  <div className="p-3 bg-slate-50/70 rounded-lg border border-slate-200/70 space-y-2 text-xs">
+                    <div className="flex items-center justify-between text-slate-700 font-medium pb-1.5 border-b border-slate-200/60 text-[11px]">
+                      <div className="flex items-center gap-1.5">
+                        <Palette className="w-3.5 h-3.5 text-slate-500" />
+                        <span>【{currentFormat.name}】 仕様サマリー</span>
+                      </div>
+                      <span className="font-mono text-[10px] text-slate-500">
+                        A4 縦
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
+                      <div>
+                        <span className="text-slate-400">表紙形式: </span>
+                        <span className="text-slate-700 font-medium">{currentFormat.coverTypeName}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400">テーマ色: </span>
+                        <span className="font-mono text-slate-700 font-medium inline-flex items-center gap-1">
+                          <span
+                            className="w-2 h-2 rounded-full inline-block"
+                            style={{ backgroundColor: currentFormat.color }}
+                          />
+                          {currentFormat.color}
+                        </span>
+                      </div>
+                      <div className="col-span-2">
+                        <span className="text-slate-400">書体: </span>
+                        <span className="text-slate-700">{currentFormat.fontName}</span>
+                      </div>
+                      <div className="col-span-2">
+                        <span className="text-slate-400">推奨用途: </span>
+                        <span className="text-slate-700">{currentFormat.bestFor}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 出力先 & PDF生成ボタン */}
+                <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs space-y-3">
+                  <div>
+                    <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                      出力先 PDF ファイルパス
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={outputPath}
+                        onChange={(e) => setOutputPath(e.target.value)}
+                        placeholder="C:\Users\...\output.pdf"
+                        className="flex-1 px-3 py-1.5 text-xs font-mono border border-slate-200 rounded-lg focus:outline-none focus:border-slate-800 focus:ring-1 focus:ring-slate-800 transition"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleSelectOutputPath}
+                        className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium border border-slate-200 transition shrink-0 cursor-pointer"
+                      >
+                        参照...
+                      </button>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleGenerate}
+                    disabled={isGenerating || !fileData || !outputPath}
+                    className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white rounded-lg text-xs font-medium shadow-2xs transition flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    {isGenerating ? (
+                      <>
+                        <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        <span>PDF をレンダリング中...</span>
+                      </>
+                    ) : (
+                      <>
+                        <FileDown className="w-4 h-4" />
+                        <span>PDF を書き出す</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         )}
       </div>
 
       {/* 右カラム: プレビュー & ログ / 完了結果 */}
-      <div className="w-full md:w-[54%] flex flex-col bg-white border border-slate-200 rounded-xl shadow-2xs overflow-hidden h-full min-h-[500px]">
+      <div className="w-full md:w-1/2 flex flex-col bg-white border border-slate-200 rounded-xl shadow-2xs overflow-hidden h-full">
         {/* タブバー */}
         <div className="flex items-center justify-between border-b border-slate-200/90 px-4 py-2 bg-white shrink-0">
           <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200/70 text-xs">
@@ -1319,9 +2189,14 @@ export default function GeneratorView(): React.JSX.Element {
           </div>
         )}
 
-        {/* コンテンツエリア */}
-        <div className="flex-1 overflow-y-auto bg-[#ebedef] p-5">
-          {activeTab === 'formatted' ? (
+        {/* コンテンツエリア (スクロールコンテナ + 上下移動バー) */}
+        <div className="flex-1 relative overflow-hidden flex flex-col bg-[#ebedef]">
+          <div
+            ref={previewContainerRef}
+            onScroll={handlePreviewScroll}
+            className="flex-1 overflow-y-auto p-5 preview-scrollbar relative"
+          >
+            {activeTab === 'formatted' ? (
             fileData ? (
               /* A4用紙シート リアルタイム組版シミュレーション */
               <div className="space-y-6 max-w-xl mx-auto flex flex-col items-center">
@@ -1607,6 +2482,53 @@ export default function GeneratorView(): React.JSX.Element {
                 ))
               )}
               <div ref={logEndRef} />
+            </div>
+          )}
+          </div>
+
+          {/* 右端に配置される上下移動バー (Scroll Controller) */}
+          {activeTab === 'formatted' && fileData && (
+            <div className="absolute right-3.5 top-1/2 -translate-y-1/2 flex flex-col items-center bg-white/95 backdrop-blur-sm border border-slate-200/90 rounded-full py-2 px-1 shadow-md z-30 select-none space-y-1.5">
+              {/* 最上部へジャンプ */}
+              <button
+                type="button"
+                onClick={scrollToTop}
+                className="w-7 h-7 rounded-full flex items-center justify-center text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition cursor-pointer"
+                title="最上部へ移動"
+              >
+                <ChevronUp className="w-4 h-4" />
+              </button>
+
+              {/* 上下に移動できる自作スクロールトラック（縦方向ドラッグ対応） */}
+              <div
+                ref={scrollTrackRef}
+                onMouseDown={handleScrollTrackMouseDown}
+                className="w-2.5 h-28 bg-slate-200/90 hover:bg-slate-300/80 rounded-full relative cursor-pointer my-1 transition-colors group select-none"
+                title={`スクロール位置: ${previewScrollPercent}% (クリックまたは上下にドラッグしてスクロール)`}
+              >
+                {/* ドラッグ可能なサム（つまみ） */}
+                <div
+                  style={{
+                    top: `${(previewScrollPercent / 100) * (112 - 24)}px`
+                  }}
+                  className="w-2.5 h-6 bg-slate-700 group-hover:bg-slate-900 rounded-full absolute left-0 shadow-xs transition-colors cursor-grab active:cursor-grabbing pointer-events-none"
+                />
+              </div>
+
+              {/* 最下部へジャンプ */}
+              <button
+                type="button"
+                onClick={scrollToBottom}
+                className="w-7 h-7 rounded-full flex items-center justify-center text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition cursor-pointer"
+                title="最下部へ移動"
+              >
+                <ChevronDown className="w-4 h-4" />
+              </button>
+
+              {/* スクロール進捗パーセンテージ */}
+              <span className="text-[9px] font-mono font-semibold text-slate-500 pt-0.5">
+                {previewScrollPercent}%
+              </span>
             </div>
           )}
         </div>
