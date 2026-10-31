@@ -36,7 +36,9 @@ import {
   ChevronUp,
   ChevronDown,
   CheckSquare,
-  Minus
+  Minus,
+  ZoomIn,
+  ZoomOut
 } from 'lucide-react'
 import {
   MarkdownFileData,
@@ -309,6 +311,98 @@ function extractHeadings(markdown: string): HeadingItem[] {
   return headings
 }
 
+// 該当ページのHTMLからランニングヘッダー（章タイトル）を動的取得
+function getPageRunningHeaderFromHtml(html: string, fallback: string): string {
+  const match = html.match(/<h[12][^>]*>(.*?)<\/h[12]>/i)
+  if (match) {
+    return match[1].replace(/<[^>]+>/g, '').trim()
+  }
+  return fallback
+}
+
+// A4 ページ寸法定数 (1 : 1.414)
+const A4_SHEET_WIDTH = 520 // px
+const A4_SHEET_HEIGHT = 735 // px
+
+// DOM測定を利用して、A4の1枚に収まらない長文を自動的に次ページに分割する関数
+function paginateHtmlContent(
+  htmlContent: string,
+  maxHeightP1: number,
+  maxHeightStandard: number,
+  measureContainer: HTMLElement | null
+): string[] {
+  if (!htmlContent || !htmlContent.trim()) return ['']
+
+  const parser = new DOMParser()
+  const doc = parser.parseFromString(`<div>${htmlContent}</div>`, 'text/html')
+  const root = doc.body.firstElementChild
+  if (!root || root.children.length === 0) {
+    return [htmlContent]
+  }
+
+  // 測定コンテナが無い場合のフォールバック
+  if (!measureContainer) {
+    return [htmlContent]
+  }
+
+  // 測定コンテナをクリア
+  measureContainer.innerHTML = ''
+
+  const pages: string[] = []
+  let currentElements: string[] = []
+  let currentHeight = 0
+  let currentLimit = maxHeightP1
+
+  const children = Array.from(root.children)
+
+  for (let i = 0; i < children.length; i++) {
+    const el = children[i] as HTMLElement
+
+    // 明示的な改ページタグの判定
+    const isExplicitBreak =
+      el.getAttribute('style')?.includes('page-break-after') ||
+      el.getAttribute('style')?.includes('break-after') ||
+      el.getAttribute('style')?.includes('page-break-before') ||
+      el.getAttribute('style')?.includes('break-before') ||
+      el.classList.contains('page-break') ||
+      el.classList.contains('pagebreak')
+
+    if (isExplicitBreak) {
+      pages.push(currentElements.join(''))
+      currentElements = []
+      currentHeight = 0
+      currentLimit = maxHeightStandard
+      continue
+    }
+
+    // 要素のクローンを測定コンテナに追加して高さを計測
+    const clone = el.cloneNode(true) as HTMLElement
+    measureContainer.appendChild(clone)
+    const computed = window.getComputedStyle(clone)
+    const mt = parseFloat(computed.marginTop) || 0
+    const mb = parseFloat(computed.marginBottom) || 0
+    const elH = clone.offsetHeight + mt + mb
+    measureContainer.removeChild(clone)
+
+    // この要素を追加すると制限高さを超える場合（かつ現在のページに既に要素がある場合）
+    if (currentElements.length > 0 && currentHeight + elH > currentLimit) {
+      pages.push(currentElements.join(''))
+      currentElements = [el.outerHTML]
+      currentHeight = elH
+      currentLimit = maxHeightStandard
+    } else {
+      currentElements.push(el.outerHTML)
+      currentHeight += elH
+    }
+  }
+
+  if (currentElements.length > 0 || pages.length === 0) {
+    pages.push(currentElements.join(''))
+  }
+
+  return pages.length > 0 ? pages : ['']
+}
+
 // Notionライクなスラッシュコマンド定義
 interface SlashCommandItem {
   id: string
@@ -454,6 +548,13 @@ export default function GeneratorView(): React.JSX.Element {
   const scrollTrackRef = useRef<HTMLDivElement>(null)
   const isDraggingScroll = useRef<boolean>(false)
 
+  // プレビューのズーム倍率 (Ctrl + マウスホイールで 50% 〜 200%)
+  const [zoomLevel, setZoomLevel] = useState<number>(100)
+
+  // A4 自動改ページ計算用の非表示測定コンテナ ref & 分割済みページ
+  const measureContainerRef = useRef<HTMLDivElement>(null)
+  const [paginatedPages, setPaginatedPages] = useState<string[]>([''])
+
   // フォーム用ステート
   const [title, setTitle] = useState<string>('')
   const [author, setAuthor] = useState<string>('')
@@ -466,6 +567,9 @@ export default function GeneratorView(): React.JSX.Element {
   const [logs, setLogs] = useState<string[]>([])
   const [result, setResult] = useState<PdfGenerateResult | null>(null)
   const [activeTab, setActiveTab] = useState<'formatted' | 'raw' | 'logs'>('formatted')
+
+  // Markdownから抽出した見出しリスト (useEffect より前に宣言)
+  const markdownHeadings = fileData ? extractHeadings(fileData.body) : []
 
   const logEndRef = useRef<HTMLDivElement>(null)
 
@@ -507,6 +611,52 @@ export default function GeneratorView(): React.JSX.Element {
       window.removeEventListener('drop', handleWindowDrop)
     }
   }, [])
+
+  // Ctrl + マウスホイールによるプレビュー拡大縮小 (50%〜200%)
+  useEffect(() => {
+    const container = previewContainerRef.current
+    if (!container) return
+
+    const handleWheel = (e: WheelEvent) => {
+      if (e.ctrlKey) {
+        e.preventDefault()
+        const step = 10
+        const delta = e.deltaY < 0 ? step : -step
+        setZoomLevel((prev) => Math.min(200, Math.max(50, prev + delta)))
+      }
+    }
+
+    container.addEventListener('wheel', handleWheel, { passive: false })
+    return () => {
+      container.removeEventListener('wheel', handleWheel)
+    }
+  }, [])
+
+  // 文章が A4 を超えた場合の自動改ページ（DOM測定による動的ブロック分割）
+  useEffect(() => {
+    if (!fileData?.body) {
+      setPaginatedPages([''])
+      return
+    }
+
+    const container = measureContainerRef.current
+    if (!container) return
+
+    // 1ページ目の目次高さ概算 (見出し数による)
+    let p1TocHeight = 0
+    if (toc && markdownHeadings.length > 0) {
+      p1TocHeight = 36 + Math.min(6, markdownHeadings.length) * 22
+    }
+    const isCompact = selectedTemplate === 'compact'
+    const p1CompactHeaderHeight = isCompact ? 70 : 0
+    // A4 用紙本文の利用可能実効高さ (安全マージン 580px)
+    const maxP1 = Math.max(250, 580 - p1CompactHeaderHeight - p1TocHeight)
+    const maxStd = 580
+
+    const rawHtml = marked.parse(fileData.body, { async: false, gfm: true, breaks: true }) as string
+    const pages = paginateHtmlContent(rawHtml, maxP1, maxStd, container)
+    setPaginatedPages(pages)
+  }, [fileData?.body, title, author, date, toc, selectedTemplate, markdownHeadings.length])
 
   // ログが追加されたら下へ自動スクロール
   useEffect(() => {
@@ -1094,8 +1244,8 @@ export default function GeneratorView(): React.JSX.Element {
       }
     }
 
-  // Markdownから抽出した見出しリスト
-  const markdownHeadings = fileData ? extractHeadings(fileData.body) : []
+  // 総ページ数 (独立表紙がある場合は +1)
+  const totalPages = (currentFormat.coverType === 'standalone' ? 1 : 0) + Math.max(1, paginatedPages.length)
 
   // 各テンプレート公式仕様に忠実な表紙コンテンツ描画
   const renderCoverPageContent = () => {
@@ -2134,7 +2284,48 @@ export default function GeneratorView(): React.JSX.Element {
                 <span className="truncate max-w-[140px]">{progress.message}</span>
               </span>
             ) : (
-              <span>A4 (210 × 297 mm)</span>
+              <>
+                {/* ページ数表示 */}
+                {activeTab === 'formatted' && fileData && (
+                  <span className="text-slate-600 font-sans font-medium bg-slate-100 px-2 py-0.5 rounded border border-slate-200/80 text-[10px]">
+                    全 {totalPages} ページ
+                  </span>
+                )}
+
+                {/* ズームコントローラー (Ctrl + ホイールでも操作可能) */}
+                {activeTab === 'formatted' && (
+                  <div className="flex items-center bg-slate-100 rounded-lg border border-slate-200/80 p-0.5 ml-0.5 shadow-2xs">
+                    <button
+                      type="button"
+                      onClick={() => setZoomLevel((prev) => Math.max(50, prev - 10))}
+                      disabled={zoomLevel <= 50}
+                      className="p-1 hover:bg-white text-slate-600 hover:text-slate-900 rounded disabled:opacity-30 transition cursor-pointer"
+                      title="ズームアウト (Ctrl + ホイール下)"
+                    >
+                      <ZoomOut className="w-3 h-3" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setZoomLevel(100)}
+                      className="px-1.5 py-0.5 text-[10px] font-mono font-medium hover:bg-white text-slate-700 rounded transition cursor-pointer"
+                      title="100%にリセット (クリックで等倍)"
+                    >
+                      {zoomLevel}%
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setZoomLevel((prev) => Math.min(200, prev + 10))}
+                      disabled={zoomLevel >= 200}
+                      className="p-1 hover:bg-white text-slate-600 hover:text-slate-900 rounded disabled:opacity-30 transition cursor-pointer"
+                      title="ズームイン (Ctrl + ホイール上)"
+                    >
+                      <ZoomIn className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
+
+                <span className="hidden sm:inline">A4 (210 × 297 mm)</span>
+              </>
             )}
           </div>
         </div>
@@ -2198,120 +2389,26 @@ export default function GeneratorView(): React.JSX.Element {
           >
             {activeTab === 'formatted' ? (
             fileData ? (
-              /* A4用紙シート リアルタイム組版シミュレーション */
-              <div className="space-y-6 max-w-xl mx-auto flex flex-col items-center">
-                {/* ページ 1: 独立表紙 (coverType === 'standalone' の場合) */}
-                {currentFormat.coverType === 'standalone' && (
+              /* A4用紙シート リアルタイム組版シミュレーション (PDF感覚の幾何学的ズーム・A4自動改ページ対応) */
+              (() => {
+                const totalSheets = (currentFormat.coverType === 'standalone' ? 1 : 0) + Math.max(1, paginatedPages.length)
+                const SHEET_GAP = 32
+                const baseTotalHeight = totalSheets * A4_SHEET_HEIGHT + Math.max(0, totalSheets - 1) * SHEET_GAP + 48
+                const scale = zoomLevel / 100
+                const scaledHeight = Math.round(baseTotalHeight * scale)
+                const scaledWidth = Math.round(A4_SHEET_WIDTH * scale)
+
+                return (
                   <div
+                    className="flex justify-center items-start mx-auto relative select-none w-full"
                     style={{
-                      backgroundColor: currentFormat.paperBg
+                      minHeight: `${scaledHeight}px`,
+                      minWidth: `${Math.max(scaledWidth, A4_SHEET_WIDTH)}px`,
+                      paddingTop: '20px',
+                      paddingBottom: '28px'
                     }}
-                    className="shadow-[0_2px_14px_rgba(0,0,0,0.06)] border border-slate-300/70 rounded-[1px] w-full max-w-[490px] aspect-[1/1.414] relative overflow-hidden transition-all duration-200"
                   >
-                    {/* ページ右上の控えめなノンブル表示 */}
-                    <div className="absolute top-3 right-3 text-[9px] font-mono opacity-40 z-20">
-                      1 / 2 表紙
-                    </div>
-
-                    {/* 公式テンプレート実体準拠の表紙レンダラー */}
-                    {renderCoverPageContent()}
-                  </div>
-                )}
-
-                {/* ページ 2（または compact などの一体型 1ページ目）: 本文組版 */}
-                <div
-                  style={{
-                    backgroundColor: currentFormat.paperBg
-                  }}
-                  className={`shadow-[0_2px_14px_rgba(0,0,0,0.06)] border border-slate-300/70 rounded-[1px] w-full max-w-[490px] min-h-[700px] p-8 md:p-10 flex flex-col justify-between relative overflow-hidden transition-all duration-200 ${
-                    currentFormat.fontFamily === 'serif' ? 'font-serif text-[#20252b]' : 'font-sans text-slate-700'
-                  }`}
-                >
-                  {/* ページ右上の控えめなノンブル表示 */}
-                  <div className="absolute top-4 right-4 text-[10px] font-mono text-slate-400">
-                    {currentFormat.coverType === 'standalone' ? '2 / 2 本文' : '1 / 1 本文'}
-                  </div>
-
-                  <div>
-                    {/* 上部ランニングヘッダー (compact 以外) */}
-                    {currentFormat.coverType !== 'integrated' && (
-                      <div
-                        className={`pb-2 mb-6 flex items-center justify-between text-[10px] ${
-                          currentFormat.fontFamily === 'serif'
-                            ? 'font-serif border-b-[0.8px] border-[#243f5b]/40 text-[#59636d]'
-                            : selectedTemplate === 'technical'
-                            ? 'font-mono border-b border-[#aebbc4] text-[#086f83]'
-                            : 'font-mono border-b border-slate-200/80 text-slate-400'
-                        }`}
-                      >
-                        <span className="truncate max-w-[180px]">{title || 'ドキュメント'}</span>
-                        <span className="truncate max-w-[160px] font-medium">
-                          {currentFormat.runningHeader}
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Compact テンプレート専用の公式上部ヘッダーバー (下線太字 + タイトル + メタデータ) */}
-                    {selectedTemplate === 'compact' && (
-                      <div className="mb-6 pb-3 border-b-[2px] border-[#343a40]">
-                        <div className="flex items-start justify-between gap-4">
-                          <h1 className="text-lg md:text-xl font-bold text-[#202428] leading-tight">
-                            {title || '(タイトル未設定)'}
-                          </h1>
-                          <div className="text-right text-[11px] text-[#596168] shrink-0 font-mono space-y-0.5">
-                            <div>{author || '著者未設定'}</div>
-                            <div>{date || '日付未設定'}</div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* 目次表示 (tocが有効な場合) */}
-                    {toc && (
-                      <div className="mb-6 pb-4 border-b border-slate-200/70 space-y-2">
-                        <div
-                          style={{ color: currentFormat.color }}
-                          className="text-xs font-bold pb-1 flex items-center gap-1.5"
-                        >
-                          <ListOrdered className="w-3.5 h-3.5" />
-                          <span>目 次</span>
-                        </div>
-
-                        {markdownHeadings.length > 0 ? (
-                          <div className="space-y-1 text-[11px]">
-                            {markdownHeadings.slice(0, 6).map((hd, hIdx) => (
-                              <div
-                                key={hIdx}
-                                className={`flex items-baseline justify-between ${
-                                  hd.level === 1
-                                    ? 'font-medium opacity-90'
-                                    : hd.level === 2
-                                    ? 'pl-2 opacity-80'
-                                    : 'pl-4 opacity-70'
-                                }`}
-                              >
-                                <span className="truncate pr-2">{hd.text}</span>
-                                <div className="flex-1 border-b border-dotted border-slate-300 mx-1 mb-1" />
-                                <span className="font-mono text-[10px] opacity-60 shrink-0">
-                                  {hd.level === 1 ? '1' : hd.level === 2 ? '1' : '2'}
-                                </span>
-                              </div>
-                            ))}
-                            {markdownHeadings.length > 6 && (
-                              <div className="text-[10px] text-slate-400 pl-2 italic">
-                                ...他 {markdownHeadings.length - 6} 項目
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="text-[11px] text-slate-400 italic py-1">
-                            文書内に見出しが存在しません
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* 本文段落レンダリング (marked による GFM 完全準拠組版) */}
+                    {/* 共通組版 CSS スタイル定義 (GFM 完全準拠) */}
                     <style>{`
                       .pfpdf-body-preview h1 {
                         font-size: 1.15rem;
@@ -2324,7 +2421,7 @@ export default function GeneratorView(): React.JSX.Element {
                         padding-bottom: ${currentFormat.h1Style.borderBottom ? '0.25rem' : '0'};
                       }
                       .pfpdf-body-preview h1:first-child {
-                        margin-top: 0.5rem;
+                        margin-top: 0.2rem;
                       }
                       .pfpdf-body-preview h2 {
                         font-size: 0.95rem;
@@ -2352,6 +2449,7 @@ export default function GeneratorView(): React.JSX.Element {
                         line-height: ${currentFormat.id === 'book' ? '1.9' : currentFormat.id === 'compact' ? '1.55' : '1.75'};
                         font-size: 0.8rem;
                         color: ${currentFormat.fontFamily === 'serif' ? '#292521' : '#334155'};
+                        word-break: break-word;
                       }
                       .pfpdf-body-preview ul {
                         margin-top: 0.5rem;
@@ -2431,26 +2529,187 @@ export default function GeneratorView(): React.JSX.Element {
                       }
                     `}</style>
 
+                    {/* 幾何学的スケーリングレイヤー (PDF拡大縮小の体感を完全再現) */}
                     <div
-                      className="pfpdf-body-preview"
-                      dangerouslySetInnerHTML={{
-                        __html: marked.parse(fileData.body, { async: false, gfm: true }) as string
+                      style={{
+                        transform: `scale(${scale})`,
+                        transformOrigin: 'top center',
+                        width: `${A4_SHEET_WIDTH}px`
                       }}
-                    />
-                  </div>
+                      className="space-y-8 flex flex-col items-center shrink-0 transition-transform duration-75"
+                    >
+                      {/* ページ 1: 独立表紙 (coverType === 'standalone' の場合) */}
+                      {currentFormat.coverType === 'standalone' && (
+                        <div
+                          style={{
+                            backgroundColor: currentFormat.paperBg,
+                            width: `${A4_SHEET_WIDTH}px`,
+                            height: `${A4_SHEET_HEIGHT}px`
+                          }}
+                          className="shadow-[0_2px_14px_rgba(0,0,0,0.08)] border border-slate-300/70 rounded-[1px] relative overflow-hidden transition-all duration-200 shrink-0"
+                        >
+                          {/* ページ右上の控えめなノンブル表示 */}
+                          <div className="absolute top-3 right-3 text-[9px] font-mono opacity-40 z-20">
+                            1 / {totalPages} 表紙
+                          </div>
 
-                  {/* 下部ノンブル（ページ番号） */}
-                  <div
-                    className={`text-[10px] text-slate-400 font-mono pt-6 pb-2 border-t border-slate-100/80 flex ${
-                      currentFormat.pageNumberPos.includes('右')
-                        ? 'justify-end'
-                        : 'justify-center'
-                    }`}
-                  >
-                    <span>- 1 -</span>
+                          {/* 公式テンプレート実体準拠の表紙レンダラー */}
+                          {renderCoverPageContent()}
+                        </div>
+                      )}
+
+                      {/* 本文各ページシート (A4超過自動分割 + 改ページタグ対応) */}
+                      {paginatedPages.map((pageHtml, segIdx) => {
+                        const actualPageNum = (currentFormat.coverType === 'standalone' ? 2 : 1) + segIdx
+                        const isFirstContentPage = segIdx === 0
+                        const runningHeaderTitle = getPageRunningHeaderFromHtml(pageHtml, currentFormat.runningHeader)
+
+                        // テンプレートに応じた下部ノンブル表記
+                        const getPageNumberText = () => {
+                          if (selectedTemplate === 'pfn') return `- ${actualPageNum} -`
+                          if (selectedTemplate === 'business') return `${actualPageNum} / ${totalPages}`
+                          if (selectedTemplate === 'academic' || selectedTemplate === 'technical') return `${actualPageNum}`
+                          return `- ${actualPageNum} -`
+                        }
+
+                        return (
+                          <React.Fragment key={segIdx}>
+                            {/* 2ページ目以降の改ページ境界ガイド表示 */}
+                            {segIdx > 0 && (
+                              <div
+                                style={{ width: `${A4_SHEET_WIDTH}px` }}
+                                className="flex items-center justify-center gap-3 py-1 select-none opacity-60"
+                              >
+                                <div className="flex-1 border-t border-dashed border-slate-300" />
+                                <span className="text-[10px] font-mono text-slate-500 bg-slate-200/90 px-2.5 py-0.5 rounded-full shadow-2xs">
+                                  改ページ (Page {actualPageNum})
+                                </span>
+                                <div className="flex-1 border-t border-dashed border-slate-300" />
+                              </div>
+                            )}
+
+                            {/* 固定寸法 A4 本文シート (中身が溢れないよう自動分割済み) */}
+                            <div
+                              style={{
+                                backgroundColor: currentFormat.paperBg,
+                                width: `${A4_SHEET_WIDTH}px`,
+                                height: `${A4_SHEET_HEIGHT}px`
+                              }}
+                              className={`shadow-[0_2px_14px_rgba(0,0,0,0.08)] border border-slate-300/70 rounded-[1px] p-8 flex flex-col justify-between relative overflow-hidden transition-all duration-200 shrink-0 ${
+                                currentFormat.fontFamily === 'serif' ? 'font-serif text-[#20252b]' : 'font-sans text-slate-700'
+                              }`}
+                            >
+                              {/* ページ右上の控えめなノンブル表示 */}
+                              <div className="absolute top-4 right-4 text-[10px] font-mono text-slate-400">
+                                {actualPageNum} / {totalPages} 本文
+                              </div>
+
+                              <div className="flex-1 overflow-hidden flex flex-col">
+                                {/* 上部ランニングヘッダー (compact 1枚目以外) */}
+                                {!(selectedTemplate === 'compact' && isFirstContentPage) && (
+                                  <div
+                                    className={`pb-2 mb-4 flex items-center justify-between text-[10px] shrink-0 ${
+                                      currentFormat.fontFamily === 'serif'
+                                        ? 'font-serif border-b-[0.8px] border-[#243f5b]/40 text-[#59636d]'
+                                        : selectedTemplate === 'technical'
+                                        ? 'font-mono border-b border-[#aebbc4] text-[#086f83]'
+                                        : 'font-mono border-b border-slate-200/80 text-slate-400'
+                                    }`}
+                                  >
+                                    <span className="truncate max-w-[180px]">{title || 'ドキュメント'}</span>
+                                    <span className="truncate max-w-[160px] font-medium">
+                                      {runningHeaderTitle}
+                                    </span>
+                                  </div>
+                                )}
+
+                                {/* Compact テンプレート専用の公式上部ヘッダーバー (1枚目のみ) */}
+                                {selectedTemplate === 'compact' && isFirstContentPage && (
+                                  <div className="mb-4 pb-2.5 border-b-[2px] border-[#343a40] shrink-0">
+                                    <div className="flex items-start justify-between gap-4">
+                                      <h1 className="text-lg md:text-xl font-bold text-[#202428] leading-tight">
+                                        {title || '(タイトル未設定)'}
+                                      </h1>
+                                      <div className="text-right text-[11px] text-[#596168] shrink-0 font-mono space-y-0.5">
+                                        <div>{author || '著者未設定'}</div>
+                                        <div>{date || '日付未設定'}</div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* 目次表示 (tocが有効な場合、本文1枚目に表示) */}
+                                {toc && isFirstContentPage && (
+                                  <div className="mb-4 pb-3 border-b border-slate-200/70 space-y-1.5 shrink-0">
+                                    <div
+                                      style={{ color: currentFormat.color }}
+                                      className="text-xs font-bold pb-0.5 flex items-center gap-1.5"
+                                    >
+                                      <ListOrdered className="w-3.5 h-3.5" />
+                                      <span>目 次</span>
+                                    </div>
+
+                                    {markdownHeadings.length > 0 ? (
+                                      <div className="space-y-1 text-[11px]">
+                                        {markdownHeadings.slice(0, 6).map((hd, hIdx) => (
+                                          <div
+                                            key={hIdx}
+                                            className={`flex items-baseline justify-between ${
+                                              hd.level === 1
+                                                ? 'font-medium opacity-90'
+                                                : hd.level === 2
+                                                ? 'pl-2 opacity-80'
+                                                : 'pl-4 opacity-70'
+                                            }`}
+                                          >
+                                            <span className="truncate pr-2">{hd.text}</span>
+                                            <div className="flex-1 border-b border-dotted border-slate-300 mx-1 mb-1" />
+                                            <span className="font-mono text-[10px] opacity-60 shrink-0">
+                                              {hd.level === 1 ? '1' : hd.level === 2 ? '1' : '2'}
+                                            </span>
+                                          </div>
+                                        ))}
+                                        {markdownHeadings.length > 6 && (
+                                          <div className="text-[10px] text-slate-400 pl-2 italic">
+                                            ...他 {markdownHeadings.length - 6} 項目
+                                          </div>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <div className="text-[11px] text-slate-400 italic py-1">
+                                        文書内に見出しが存在しません
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+
+                                {/* 本文段落レンダリング (A4に収まる分だけレンダリング、溢れなし) */}
+                                <div
+                                  className="pfpdf-body-preview flex-1 overflow-hidden"
+                                  dangerouslySetInnerHTML={{
+                                    __html: pageHtml
+                                  }}
+                                />
+                              </div>
+
+                              {/* 下部ノンブル（ページ番号） */}
+                              <div
+                                className={`text-[10px] text-slate-400 font-mono pt-3 pb-1 border-t border-slate-100/80 flex shrink-0 ${
+                                  currentFormat.pageNumberPos.includes('右')
+                                    ? 'justify-end'
+                                    : 'justify-center'
+                                }`}
+                              >
+                                <span>{getPageNumberText()}</span>
+                              </div>
+                            </div>
+                          </React.Fragment>
+                        )
+                      })}
+                    </div>
                   </div>
-                </div>
-              </div>
+                )
+              })()
             ) : (
               <div className="h-full flex flex-col items-center justify-center text-slate-400 text-xs py-16">
                 <FileText className="w-10 h-10 text-slate-300 mb-2 stroke-1" />
@@ -2531,6 +2790,19 @@ export default function GeneratorView(): React.JSX.Element {
               </span>
             </div>
           )}
+
+          {/* 非表示の A4 高さ自動測定用コンテナ */}
+          <div
+            ref={measureContainerRef}
+            className="pfpdf-body-preview pointer-events-none"
+            style={{
+              position: 'absolute',
+              left: '-99999px',
+              top: 0,
+              width: `${A4_SHEET_WIDTH - 64}px`,
+              visibility: 'hidden'
+            }}
+          />
         </div>
       </div>
     </div>
