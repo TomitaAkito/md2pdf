@@ -164,9 +164,13 @@ h1 {
   font-size: ${template.elementStyles.h1?.fontSize || '20pt'} !important;
   border-bottom: 2px solid var(--color-primary) !important;
   padding-bottom: 0.3em !important;
-  margin-top: 2em !important;
+  margin-top: 1.5em;
   margin-bottom: 0.8em !important;
-  break-before: page;
+}
+
+[data-pfpdf-page-break] + h1,
+.pfpdf-content section > h1:first-child {
+  margin-top: 0 !important;
 }
 
 h2 {

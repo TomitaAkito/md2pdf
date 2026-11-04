@@ -46,7 +46,20 @@ const pfpdfAPI: PfpdfAPI = {
   parsePptxBuffer: (buffer: ArrayBuffer, fileName: string) =>
     ipcRenderer.invoke('pfpdf:parse-pptx-buffer', buffer, fileName),
   exportPptxSample: (sampleType?: 'business' | 'tech' | 'academic') =>
-    ipcRenderer.invoke('pfpdf:export-pptx-sample', sampleType)
+    ipcRenderer.invoke('pfpdf:export-pptx-sample', sampleType),
+
+  // 数式 (MathJax) & Mermaid リアルタイムプレビューレンダリング API
+  renderPreviewBatch: (req) => ipcRenderer.invoke('pfpdf:render-preview-batch', req),
+
+  // ウィンドウ終了・未保存ガード API
+  onRequestClose: (callback: () => void) => {
+    const listener = () => callback()
+    ipcRenderer.on('pfpdf:request-close', listener)
+    return () => {
+      ipcRenderer.removeListener('pfpdf:request-close', listener)
+    }
+  },
+  forceCloseApp: () => ipcRenderer.invoke('pfpdf:force-close-app')
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

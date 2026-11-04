@@ -18,6 +18,7 @@ import {
 import { parsePptxFile, parsePptxBuffer } from './pptxParser'
 import { exportSamplePptxFile } from './pptxSampleGenerator'
 import { saveTemplateAsNativeDir } from './transpiler'
+import { renderPreviewBatch } from './previewRenderer'
 
 
 
@@ -43,6 +44,138 @@ function readMarkdown(filePath: string): MarkdownFileData {
   }
 }
 
+/**
+ * Markdown 内の改ページ指定（`<div style="page-break-after: always;"></div>` 等や `___`）を
+ * pfpdf 公式仕様のトップレベル `___`（前後空行付き）へ正規化し、
+ * あわせて蛍光マーカー（`<mark>...</mark>` / `==...==`）や下線（`<u>...</u>`）のインライン装飾を展開する。
+ */
+function normalizeMarkdownPageBreaks(rawMarkdown: string): string {
+  const parsed = matter(rawMarkdown)
+  const lines = parsed.content.split(/\r?\n/)
+  const outLines: string[] = []
+  let inCodeBlock = false
+
+  const pageBreakDivRegex =
+    /[ \t]*<div\b[^>]*(?:page-break|break-after|break-before|data-pfpdf-page-break|pagebreak)[^>]*>\s*<\/div>[ \t]*/gi
+
+  const transformInlineDecorations = (textLine: string): string => {
+    // インラインコード (`...`) 内は変換しないよう分割処理
+    return textLine
+      .split(/(`+[^`]*`+)/g)
+      .map((segment) => {
+        if (segment.startsWith('`')) return segment
+        return segment
+          .replace(
+            /==([^=\n]+)==/g,
+            '<span style="background: linear-gradient(transparent 60%, #ffbfa3 60%); font-weight: 700; padding: 0 1px; -webkit-print-color-adjust: exact; print-color-adjust: exact; box-decoration-break: clone; -webkit-box-decoration-break: clone;">$1</span>'
+          )
+          .replace(
+            /<mark\s+class=["']yellow["']\s*>([\s\S]*?)<\/mark>/gi,
+            '<span style="background: linear-gradient(transparent 60%, #fef08a 60%); font-weight: 700; padding: 0 1px; -webkit-print-color-adjust: exact; print-color-adjust: exact; box-decoration-break: clone; -webkit-box-decoration-break: clone;">$1</span>'
+          )
+          .replace(
+            /<mark>([\s\S]*?)<\/mark>/gi,
+            '<span style="background: linear-gradient(transparent 60%, #ffbfa3 60%); font-weight: 700; padding: 0 1px; -webkit-print-color-adjust: exact; print-color-adjust: exact; box-decoration-break: clone; -webkit-box-decoration-break: clone;">$1</span>'
+          )
+          .replace(
+            /<u>([\s\S]*?)<\/u>/gi,
+            '<u style="text-decoration: underline; text-underline-offset: 0.2em; text-decoration-thickness: 1pt;">$1</u>'
+          )
+      })
+      .join('')
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    const trimmed = line.trim()
+    if (trimmed.startsWith('```') || trimmed.startsWith('~~~')) {
+      inCodeBlock = !inCodeBlock
+      outLines.push(line)
+      continue
+    }
+    if (inCodeBlock) {
+      outLines.push(line)
+      continue
+    }
+
+    if (pageBreakDivRegex.test(line)) {
+      pageBreakDivRegex.lastIndex = 0
+      const replaced = transformInlineDecorations(line.replace(pageBreakDivRegex, '\n\n___\n\n'))
+      outLines.push(replaced)
+      continue
+    }
+
+    if (/^___+\s*$/.test(trimmed)) {
+      outLines.push('', '___', '')
+      continue
+    }
+
+    const transformedLine = transformInlineDecorations(line)
+
+    // 通常の文章行（段落行）における Enter 改行を <br> として扱う処理
+    // 見出し・リスト・テーブル・水平線・引用・数式ブロック・HTMLブロックではない行で、
+    // 次の行に継続して文章が続く場合、行末に <br> を補完して pfpdf で改行させる
+    const isSpecialBlock =
+      trimmed === '' ||
+      trimmed.startsWith('#') ||
+      trimmed.startsWith('>') ||
+      trimmed.startsWith('-') ||
+      trimmed.startsWith('*') ||
+      trimmed.startsWith('+') ||
+      /^\d+\.\s/.test(trimmed) ||
+      (trimmed.startsWith('|') && trimmed.endsWith('|')) ||
+      trimmed === '---' ||
+      trimmed.startsWith('$$') ||
+      trimmed.startsWith('<details') ||
+      trimmed.startsWith('</details') ||
+      trimmed.startsWith('<summary') ||
+      trimmed.startsWith('</summary') ||
+      trimmed.startsWith('<div') ||
+      trimmed.startsWith('</div>') ||
+      trimmed.startsWith('<table') ||
+      trimmed.startsWith('</table>')
+
+    if (!isSpecialBlock && i + 1 < lines.length) {
+      const nextTrimmed = lines[i + 1].trim()
+      const nextIsSpecial =
+        nextTrimmed === '' ||
+        nextTrimmed.startsWith('#') ||
+        nextTrimmed.startsWith('```') ||
+        nextTrimmed.startsWith('~~~') ||
+        nextTrimmed.startsWith('>') ||
+        nextTrimmed.startsWith('-') ||
+        nextTrimmed.startsWith('*') ||
+        nextTrimmed.startsWith('+') ||
+        /^\d+\.\s/.test(nextTrimmed) ||
+        (nextTrimmed.startsWith('|') && nextTrimmed.endsWith('|')) ||
+        nextTrimmed === '---' ||
+        /^___+\s*$/.test(nextTrimmed) ||
+        nextTrimmed.startsWith('$$') ||
+        nextTrimmed.startsWith('<div')
+
+      if (!nextIsSpecial && !/<\s*br\s*\/?>\s*$/i.test(transformedLine)) {
+        outLines.push(`${transformedLine}<br>`)
+        continue
+      }
+    }
+
+    outLines.push(transformedLine)
+  }
+
+  const normalizedBody = outLines.join('\n').replace(/\n{3,}/g, '\n\n')
+  if (rawMarkdown.startsWith('---')) {
+    const fmEnd = rawMarkdown.indexOf('\n---', 3)
+    if (fmEnd !== -1) {
+      const fmBlock = rawMarkdown.slice(0, fmEnd + 4)
+      return `${fmBlock}\n\n${normalizedBody}\n`
+    }
+  }
+  return `${normalizedBody}\n`
+}
+
+let mainWindowInstance: BrowserWindow | null = null
+let isForceClosing = false
+
 function createWindow(): void {
   // Create the browser window.
   const mainWindow = new BrowserWindow({
@@ -54,6 +187,15 @@ function createWindow(): void {
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false
+    }
+  })
+
+  mainWindowInstance = mainWindow
+
+  mainWindow.on('close', (e) => {
+    if (!isForceClosing) {
+      e.preventDefault()
+      mainWindow.webContents.send('pfpdf:request-close')
     }
   })
 
@@ -279,9 +421,20 @@ console.log(greet("Pfpdf Studio"));
         emitProgress('preparing', 'Front Matter または本文の変更を反映中...')
         const tempDir = app.getPath('temp')
         const tempMdPath = join(tempDir, `pfpdf-gen-${Date.now()}.md`)
-        fs.writeFileSync(tempMdPath, options.contentOverride, 'utf-8')
+        const normalizedContent = normalizeMarkdownPageBreaks(options.contentOverride)
+        fs.writeFileSync(tempMdPath, normalizedContent, 'utf-8')
         targetInput = tempMdPath
         tempFileToDelete = tempMdPath
+      } else if (options.inputPath && fs.existsSync(options.inputPath)) {
+        const rawFile = fs.readFileSync(options.inputPath, 'utf-8')
+        const normalizedContent = normalizeMarkdownPageBreaks(rawFile)
+        if (normalizedContent !== rawFile) {
+          const tempDir = app.getPath('temp')
+          const tempMdPath = join(tempDir, `pfpdf-gen-${Date.now()}.md`)
+          fs.writeFileSync(tempMdPath, normalizedContent, 'utf-8')
+          targetInput = tempMdPath
+          tempFileToDelete = tempMdPath
+        }
       }
 
       // 出力先ディレクトリの確保
@@ -612,6 +765,25 @@ console.log(greet("Pfpdf Studio"));
     }
   )
 
+  // 数式 (MathJax) & Mermaid リアルタイムプレビュー用一括レンダリングハンドラ
+  ipcMain.handle('pfpdf:render-preview-batch', async (_event, req) => {
+    try {
+      return await renderPreviewBatch(req)
+    } catch (err: any) {
+      console.error('Error in render-preview-batch:', err)
+      return { mathResults: {}, mermaidResults: {} }
+    }
+  })
+
+  // ウィンドウ強制終了ハンドラ（未保存確認完了後）
+  ipcMain.handle('pfpdf:force-close-app', () => {
+    isForceClosing = true
+    if (mainWindowInstance && !mainWindowInstance.isDestroyed()) {
+      mainWindowInstance.close()
+    } else {
+      app.quit()
+    }
+  })
 
   createWindow()
 

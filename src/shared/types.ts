@@ -243,5 +243,18 @@ export interface PfpdfAPI {
   parsePptxFile: (filePath: string) => Promise<PptxParseResult>;
   parsePptxBuffer: (buffer: ArrayBuffer, fileName: string) => Promise<PptxParseResult>;
   exportPptxSample: (sampleType?: 'business' | 'tech' | 'academic') => Promise<{ success: boolean; filePath?: string; error?: string }>;
+
+  // 数式 (MathJax) & Mermaid リアルタイムプレビューレンダリング API
+  renderPreviewBatch?: (req: {
+    mathItems: Array<{ id: string; tex: string; display: boolean }>;
+    mermaidItems: Array<{ id: string; source: string }>;
+  }) => Promise<{
+    mathResults: Record<string, string>;
+    mermaidResults: Record<string, string>;
+  }>;
+
+  // ウィンドウ終了・未保存ガード API
+  onRequestClose?: (callback: () => void) => () => void;
+  forceCloseApp?: () => void;
 }
 

@@ -23,6 +23,9 @@ $ npm run dev
 ### Build
 
 ```bash
+# For ZIP
+npm run build:unpack
+
 # For windows
 $ npm run build:win
 
