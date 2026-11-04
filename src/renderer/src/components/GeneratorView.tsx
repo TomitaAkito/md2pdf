@@ -42,8 +42,6 @@ import {
   ZoomIn,
   ZoomOut,
   Strikethrough,
-  Info,
-  AlertTriangle,
   Keyboard,
   Workflow,
   Sigma
@@ -531,7 +529,142 @@ function escapeHtml(str: string): string {
     .replace(/'/g, '&#039;')
 }
 
+// HTML タグ内の属性 (class="yellow" 等) を1パスで色分け
+const HTML_ATTR_REGEX = /([a-zA-Z_:][a-zA-Z0-9_.:-]*)(\s*=\s*)("[^"]*"|'[^']*'|[^\s"'=<>`]+)/g
+
+function highlightHtmlTagToken(rawTag: string, escapeFn: (s: string) => string): string {
+  const m = rawTag.match(/^(<\/?)([a-zA-Z][a-zA-Z0-9-]*)([\s\S]*?)(\/?>$)/)
+  if (!m) {
+    return `<span style="color: #be123c;">${escapeFn(rawTag)}</span>`
+  }
+  const openBracket = m[1]
+  const tagName = m[2]
+  const attrs = m[3]
+  const closeBracket = m[4]
+
+  const attrParts: string[] = []
+  let lastIdx = 0
+  HTML_ATTR_REGEX.lastIndex = 0
+  let am: RegExpExecArray | null
+  while ((am = HTML_ATTR_REGEX.exec(attrs)) !== null) {
+    if (am.index > lastIdx) {
+      attrParts.push(escapeFn(attrs.slice(lastIdx, am.index)))
+    }
+    attrParts.push(
+      `<span style="color: #d97706;">${escapeFn(am[1])}</span>` +
+        `<span style="color: #64748b;">${escapeFn(am[2])}</span>` +
+        `<span style="color: #2563eb;">${escapeFn(am[3])}</span>`
+    )
+    lastIdx = am.index + am[0].length
+  }
+  if (lastIdx < attrs.length) {
+    attrParts.push(escapeFn(attrs.slice(lastIdx)))
+  }
+
+  return (
+    `<span style="color: #800000;">${escapeFn(openBracket)}</span>` +
+    `<span style="color: #be123c;">${escapeFn(tagName)}</span>` +
+    attrParts.join('') +
+    `<span style="color: #800000;">${escapeFn(closeBracket)}</span>`
+  )
+}
+
+// 行内の Markdown 記号・HTMLタグを1パスでトークナイズしてタグ・記号側に色を付ける
+// ※文字幅・カーソル位置が1pxもズレないよう、文字数の増減・padding・font-weight変更は一切行わず color のみ付与する
+const INLINE_TOKEN_MASTER_REGEX =
+  /(<!--[\s\S]*?-->)|(`+[^`\n]+?`+)|(<\/?[a-zA-Z][a-zA-Z0-9-]*(?:\s+[^>\n]*)?>)|(\[[^\]\n]+\]\([^)\n]+\))|(\$\$)|((?<!\$)\$[^\$\r\n]+?\$(?!\$))|(\*\*)|((?<!\*)\*[^*\n]+?\*(?!\*))|(~~)|(==)/g
+
+function highlightInlineElements(text: string): string {
+  const escape = (s: string) =>
+    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
+  const out: string[] = []
+  let lastIdx = 0
+  const regex = new RegExp(INLINE_TOKEN_MASTER_REGEX.source, 'g')
+  let m: RegExpExecArray | null
+
+  while ((m = regex.exec(text)) !== null) {
+    if (m.index > lastIdx) {
+      out.push(escape(text.slice(lastIdx, m.index)))
+    }
+
+    const token = m[0]
+    if (m[1]) {
+      // 1. インライン HTML コメント <!-- ... --> (VSCode コメントグリーン)
+      out.push(`<span style="color: #16a34a;">${escape(token)}</span>`)
+    } else if (m[2]) {
+      // 2. インラインコード `...` (バッククォート記号に鮮やかなピンク、中身に落ち着いたコード色)
+      const mc = token.match(/^(`+)([\s\S]*?)(`+)$/)
+      if (mc) {
+        out.push(
+          `<span style="color: #db2777;">${escape(mc[1])}</span>` +
+            `<span style="color: #be185d;">${escape(mc[2])}</span>` +
+            `<span style="color: #db2777;">${escape(mc[3])}</span>`
+        )
+      } else {
+        out.push(`<span style="color: #db2777;">${escape(token)}</span>`)
+      }
+    } else if (m[3]) {
+      // 3. HTML タグ (<mark>, </mark>, <u>, </u>, <kbd>, </kbd>, <div ...> 等: タグのみ色付け)
+      out.push(highlightHtmlTagToken(token, escape))
+    } else if (m[4]) {
+      // 4. リンク [text](url)
+      const ml = token.match(/^(\[)([^\]\n]+)(\]\()([^)\n]+)(\))$/)
+      if (ml) {
+        out.push(
+          `<span style="color: #0284c7;">${escape(ml[1])}</span>` +
+            highlightInlineElements(ml[2]) +
+            `<span style="color: #0284c7;">${escape(ml[3])}</span>` +
+            `<span style="color: #2563eb;">${escape(ml[4])}</span>` +
+            `<span style="color: #0284c7;">${escape(ml[5])}</span>`
+        )
+      } else {
+        out.push(escape(token))
+      }
+    } else if (m[5]) {
+      // 5. 数式記号 $$
+      out.push(`<span style="color: #7c3aed;">${escape(token)}</span>`)
+    } else if (m[6]) {
+      // 6. インライン数式 $...$ ($ 記号にパープル色付け)
+      const inner = token.slice(1, -1)
+      out.push(
+        `<span style="color: #7c3aed;">$</span>` +
+          `<span style="color: #6d28d9;">${escape(inner)}</span>` +
+          `<span style="color: #7c3aed;">$</span>`
+      )
+    } else if (m[7]) {
+      // 7. 太字タグ ** (記号のみに VSCode ブルー色付け、中身は通常テキストとして自由編集)
+      out.push(`<span style="color: #0284c7;">${escape(token)}</span>`)
+    } else if (m[8]) {
+      // 8. 斜体 *...* (両端の * 記号に色付け、中身は再帰処理)
+      const inner = token.slice(1, -1)
+      out.push(
+        `<span style="color: #0284c7;">*</span>` +
+          highlightInlineElements(inner) +
+          `<span style="color: #0284c7;">*</span>`
+      )
+    } else if (m[9]) {
+      // 9. 取り消し線タグ ~~ (記号のみにパープル色付け)
+      out.push(`<span style="color: #9333ea;">${escape(token)}</span>`)
+    } else if (m[10]) {
+      // 10. 蛍光マーカータグ == (記号のみにオレンジ色付け)
+      out.push(`<span style="color: #ea580c;">${escape(token)}</span>`)
+    } else {
+      out.push(escape(token))
+    }
+
+    lastIdx = m.index + token.length
+  }
+
+  if (lastIdx < text.length) {
+    out.push(escape(text.slice(lastIdx)))
+  }
+
+  return out.join('')
+}
+
 // VSCode 風 Markdown シンタックスハイライト生成関数
+// ※前面の textarea と文字位置・折り返しが 100% 一致するよう、文字幅を変えるスタイルは一切使わず色のみで表現
 function highlightMarkdownForEditor(text: string): string {
   if (!text) return '<br>'
 
@@ -540,117 +673,99 @@ function highlightMarkdownForEditor(text: string): string {
 
   const lines = text.split('\n')
   let inCodeBlock = false
+  let inCommentBlock = false
 
   const highlightedLines = lines.map((line) => {
-    const trimmed = line.trim()
-
-    // コードブロック判定
-    if (trimmed.startsWith('```') || trimmed.startsWith('~~~')) {
-      inCodeBlock = !inCodeBlock
-      const match = line.match(/^([ \t]*```+|~~~+)(.*)$/)
-      if (match) {
-        return `<span style="color: #94a3b8; font-weight: bold;">${escape(match[1])}</span><span style="color: #0284c7; font-weight: 600;">${escape(match[2])}</span>`
+    // 1. 複数行 HTML コメント (<!-- ... -->) の継続判定
+    if (inCommentBlock) {
+      const closeIdx = line.indexOf('-->')
+      if (closeIdx !== -1) {
+        const endPos = closeIdx + 3
+        const commentPart = line.slice(0, endPos)
+        const restPart = line.slice(endPos)
+        inCommentBlock = false
+        return `<span style="color: #16a34a;">${escape(commentPart)}</span>${highlightInlineElements(restPart)}`
       }
-      return `<span style="color: #94a3b8;">${escape(line)}</span>`
+      return `<span style="color: #16a34a;">${escape(line)}</span>`
+    }
+
+    const openCommentIdx = line.indexOf('<!--')
+    if (openCommentIdx !== -1 && line.indexOf('-->', openCommentIdx + 4) === -1) {
+      const beforePart = line.slice(0, openCommentIdx)
+      const commentPart = line.slice(openCommentIdx)
+      inCommentBlock = true
+      return `${highlightInlineElements(beforePart)}<span style="color: #16a34a;">${escape(commentPart)}</span>`
+    }
+
+    // 2. コードブロック開始・終了フェンス (``` または ~~~)
+    const fenceMatch = line.match(/^([ \t]*(?:```+|~~~+))(.*)$/)
+    if (fenceMatch) {
+      inCodeBlock = !inCodeBlock
+      return `<span style="color: #7c3aed;">${escape(fenceMatch[1])}</span><span style="color: #0284c7;">${escape(fenceMatch[2])}</span>`
     }
 
     if (inCodeBlock) {
-      return `<span style="color: #047857; background-color: rgba(236, 253, 245, 0.6);">${escape(line)}</span>`
+      return `<span style="color: #0f766e;">${escape(line)}</span>`
     }
 
-    // HTML コメント <!-- ... --> (VSCode風グリーン)
-    if (trimmed.startsWith('<!--') && trimmed.endsWith('-->')) {
-      return `<span style="color: #16a34a; font-style: italic;">${escape(line)}</span>`
+    // 3. 見出し (# 〜 ###### : 先頭の # タグに鮮やかな VSCode ブルーを付与し、本文内のタグも色分け)
+    const headingMatch = line.match(/^([ \t]*#{1,6}(?:[ \t]+|$))([\s\S]*)$/)
+    if (headingMatch) {
+      return `<span style="color: #0284c7;">${escape(headingMatch[1])}</span>${highlightInlineElements(headingMatch[2])}`
     }
 
-    // 見出し1 (# ) - VSCode風シアンブルー＆ボールド
-    const h1Match = line.match(/^([ \t]*# )([\s\S]*)$/)
-    if (h1Match) {
-      return `<span style="color: #0284c7; font-weight: 800;">${escape(h1Match[1])}</span><span style="color: #0f172a; font-weight: 700;">${escape(h1Match[2])}</span>`
-    }
-
-    // 見出し2 (## )
-    const h2Match = line.match(/^([ \t]*## )([\s\S]*)$/)
-    if (h2Match) {
-      return `<span style="color: #0369a1; font-weight: 800;">${escape(h2Match[1])}</span><span style="color: #0f172a; font-weight: 700;">${escape(h2Match[2])}</span>`
-    }
-
-    // 見出し3 (### )
-    const h3Match = line.match(/^([ \t]*### )([\s\S]*)$/)
-    if (h3Match) {
-      return `<span style="color: #4f46e5; font-weight: 700;">${escape(h3Match[1])}</span><span style="color: #1e293b; font-weight: 600;">${escape(h3Match[2])}</span>`
-    }
-
-    // 見出し4〜6 (####+ )
-    const h4Match = line.match(/^([ \t]*#{4,6} )([\s\S]*)$/)
-    if (h4Match) {
-      return `<span style="color: #7c3aed; font-weight: 700;">${escape(h4Match[1])}</span><span style="color: #334155; font-weight: 600;">${escape(h4Match[2])}</span>`
-    }
-
-    // 引用 (> )
-    const quoteMatch = line.match(/^([ \t]*>+ )([\s\S]*)$/)
+    // 4. 引用 (> : 先頭の > 記号にブルーを付与)
+    const quoteMatch = line.match(/^([ \t]*>+[ \t]*)([\s\S]*)$/)
     if (quoteMatch) {
-      return `<span style="color: #94a3b8; font-weight: bold;">${escape(quoteMatch[1])}</span><span style="color: #475569; font-style: italic;">${escape(quoteMatch[2])}</span>`
+      return `<span style="color: #0284c7;">${escape(quoteMatch[1])}</span>${highlightInlineElements(quoteMatch[2])}`
     }
 
-    // リスト (- , * , 1. ) - オレンジアクセント
-    const listMatch = line.match(/^([ \t]*)([-*+]|\d+\.)([ \t]+)([\s\S]*)$/)
+    // 5. チェックボックスリスト (- [ ] / - [x] : 先頭記号にアンバーオレンジを付与)
+    const taskMatch = line.match(/^([ \t]*[-*+][ \t]+\[[ xX]\][ \t]+)([\s\S]*)$/)
+    if (taskMatch) {
+      return `<span style="color: #d97706;">${escape(taskMatch[1])}</span>${highlightInlineElements(taskMatch[2])}`
+    }
+
+    // 6. 箇条書き・番号付きリスト (- , * , + , 1. : 先頭記号にアンバーオレンジを付与)
+    const listMatch = line.match(/^([ \t]*(?:[-*+]|\d+\.)[ \t]+)([\s\S]*)$/)
     if (listMatch) {
-      return `${escape(listMatch[1])}<span style="color: #f59e0b; font-weight: bold;">${escape(listMatch[2])}</span>${escape(listMatch[3])}${highlightInlineElements(listMatch[4])}`
+      return `<span style="color: #d97706;">${escape(listMatch[1])}</span>${highlightInlineElements(listMatch[2])}`
     }
 
-    // 区切り線 (---) または 改ページ (___)
-    if (/^[ \t]*(---+|___+)[ \t]*$/.test(line)) {
+    // 7. 区切り線 (---) または 改ページ (___)
+    if (/^[ \t]*(?:---+|_{3,})[ \t]*$/.test(line)) {
       const isBreak = line.includes('_')
       const color = isBreak ? '#e11d48' : '#64748b'
-      const bg = isBreak ? 'rgba(255, 228, 230, 0.7)' : 'rgba(241, 245, 249, 0.7)'
-      return `<span style="color: ${color}; font-weight: bold; background-color: ${bg}; padding: 0 4px; border-radius: 3px;">${escape(line)}</span>`
+      return `<span style="color: ${color};">${escape(line)}</span>`
     }
 
-    // 通常の行: インライン装飾をハイライト
+    // 8. 通常の行: インラインのタグ・記号を色分け
     return highlightInlineElements(line)
   })
 
-  return highlightedLines.join('\n') + (text.endsWith('\n') ? '<br>' : '')
+  const result = highlightedLines.join('\n')
+  return text.endsWith('\n') ? `${result} ` : result
 }
 
-function highlightInlineElements(text: string): string {
-  const escape = (s: string) =>
-    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-
-  let res = escape(text)
-
-  // 1. コメント <!-- ... -->
-  res = res.replace(/(&lt;!--[\s\S]*?--&gt;)/g, '<span style="color: #16a34a; font-style: italic;">$1</span>')
-
-  // 2. ディスプレイ数式 $$ ... $$
-  res = res.replace(/(\$\$[\s\S]*?\$\$)/g, '<span style="color: #6366f1; font-weight: 600; background-color: rgba(238, 242, 255, 0.6); padding: 0 2px; border-radius: 2px;">$1</span>')
-
-  // 3. インライン数式 $ ... $
-  res = res.replace(/((?<!\$)\$[^\$\r\n]+?\$(?!\$))/g, '<span style="color: #6366f1; font-weight: 500;">$1</span>')
-
-  // 4. インラインコード `...`
-  res = res.replace(/(`[^`\n]+`)/g, '<span style="color: #db2777; background-color: #f1f5f9; padding: 0 3px; border-radius: 3px; font-weight: 600;">$1</span>')
-
-  // 5. 太字 **...**
-  res = res.replace(/(\*\*[^*\n]+\*\*)/g, '<span style="color: #0f172a; font-weight: 700;">$1</span>')
-
-  // 6. 斜体 *...*
-  res = res.replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, '<span style="font-style: italic; color: #334155;">$1</span>')
-
-  // 7. 取り消し線 ~~...~~
-  res = res.replace(/(~~[^~\n]+~~)/g, '<span style="text-decoration: line-through; color: #94a3b8;">$1</span>')
-
-  // 8. 蛍光マーカー ==...==
-  res = res.replace(/(==[^=\n]+==)/g, '<span style="background-color: #ffedd5; color: #9a3412; font-weight: 600; padding: 0 2px; border-radius: 2px;">$1</span>')
-
-  // 9. 下線 <u>...</u>
-  res = res.replace(/(&lt;u&gt;[\s\S]*?&lt;\/u&gt;)/g, '<span style="text-decoration: underline; text-underline-offset: 2px; text-decoration-color: #94a3b8;">$1</span>')
-
-  // 10. <mark>...</mark>
-  res = res.replace(/(&lt;mark.*?&gt;[\s\S]*?&lt;\/mark&gt;)/g, '<span style="background-color: #fef9c3; color: #854d0e; font-weight: 600; padding: 0 2px; border-radius: 2px;">$1</span>')
-
-  return res
+// エディタの文字位置・キャレット・折り返しを1pxの狂いもなく完全同期させる共通スタイル
+const EDITOR_SHARED_STYLE: React.CSSProperties = {
+  boxSizing: 'border-box',
+  border: 'none',
+  outline: 'none',
+  margin: 0,
+  padding: '14px 16px',
+  fontSize: '13px',
+  lineHeight: '22px', // 整数ピクセルで固定（行ごとにサブピクセルのズレが累積するのを完全に防止）
+  fontFamily: 'Consolas, "BIZ UDGothic", "MS Gothic", "Courier New", monospace', // Windows完全等幅フォント
+  letterSpacing: '0px',
+  wordSpacing: '0px',
+  tabSize: 2,
+  whiteSpace: 'pre-wrap',
+  overflowWrap: 'break-word',
+  wordBreak: 'break-all',
+  fontVariantLigatures: 'none',
+  fontFeatureSettings: '"liga" 0, "calt" 0',
+  textRendering: 'optimizeSpeed'
 }
 
 interface ExtractedPreviewItem {
@@ -1199,6 +1314,7 @@ export default function GeneratorView(): React.JSX.Element {
   // エディタ用ステート
   const [leftTab, setLeftTab] = useState<'editor' | 'settings'>('editor')
   const [editorText, setEditorText] = useState<string>('')
+  const [syntaxHighlightEnabled, setSyntaxHighlightEnabled] = useState<boolean>(true)
   const [isDirty, setIsDirty] = useState<boolean>(false)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [saveMessage, setSaveMessage] = useState<string>('')
@@ -1329,6 +1445,14 @@ export default function GeneratorView(): React.JSX.Element {
       highlightPreRef.current.scrollLeft = e.currentTarget.scrollLeft
     }
   }
+
+  // テキスト変更時・改行時にも背面ハイライトレイヤーのスクロール位置を厳密に同期
+  useEffect(() => {
+    if (editorRef.current && highlightPreRef.current) {
+      highlightPreRef.current.scrollTop = editorRef.current.scrollTop
+      highlightPreRef.current.scrollLeft = editorRef.current.scrollLeft
+    }
+  }, [editorText])
 
   // ウィンドウを閉じる時の未保存変更確認ガード (Electron IPC 連動)
   useEffect(() => {
@@ -2920,28 +3044,42 @@ export default function GeneratorView(): React.JSX.Element {
                     >
                       &lt;!-- --&gt;
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => setSyntaxHighlightEnabled(!syntaxHighlightEnabled)}
+                      className={`px-2 py-0.5 rounded text-[10px] font-medium transition cursor-pointer flex items-center gap-1 border ${
+                        syntaxHighlightEnabled
+                          ? 'bg-blue-50 text-blue-700 border-blue-200'
+                          : 'bg-slate-100 hover:bg-slate-200 text-slate-500 border-slate-200'
+                      }`}
+                      title={syntaxHighlightEnabled ? 'シンタックスハイライト: ON (クリックで標準テキスト表示)' : 'シンタックスハイライト: OFF (クリックでカラー表示)'}
+                    >
+                      <Palette className="w-3 h-3" />
+                      <span>{syntaxHighlightEnabled ? 'カラーON' : 'カラーOFF'}</span>
+                    </button>
                   </div>
                 </div>
 
                 {/* textarea 入力エリア ＆ VSCode風シンタックスハイライト */}
-                <div className="relative flex-1 flex flex-col min-h-0 bg-white">
-                  {/* 背面: VSCode 風シンタックスハイライト描画レイヤー */}
-                  <pre
-                    ref={highlightPreRef}
-                    aria-hidden="true"
-                    className="absolute inset-0 p-3.5 m-0 font-mono text-xs leading-relaxed pointer-events-none select-none overflow-hidden whitespace-pre-wrap break-words bg-white text-slate-800"
-                    style={{
-                      boxSizing: 'border-box',
-                      border: 'none',
-                      lineHeight: '1.625',
-                      fontFamily: '"Noto Sans Mono", Consolas, "Courier New", monospace'
-                    }}
-                    dangerouslySetInnerHTML={{
-                      __html: highlightMarkdownForEditor(editorText)
-                    }}
-                  />
+                <div className="relative flex-1 min-h-0 bg-white overflow-hidden">
+                  {/* 背面: VSCode 風シンタックスハイライト描画レイヤー (textareaと1pxのズレもなく完全一致) */}
+                  {syntaxHighlightEnabled && (
+                    <pre
+                      ref={highlightPreRef}
+                      aria-hidden="true"
+                      className="pfpdf-editor-backdrop absolute inset-0 w-full h-full m-0 pointer-events-none select-none bg-white text-slate-800"
+                      style={{
+                        ...EDITOR_SHARED_STYLE,
+                        overflowY: 'scroll',
+                        overflowX: 'hidden'
+                      }}
+                      dangerouslySetInnerHTML={{
+                        __html: highlightMarkdownForEditor(editorText)
+                      }}
+                    />
+                  )}
 
-                  {/* 前面: 実際の入力用 textarea (透明化) */}
+                  {/* 前面: 実際の入力用 textarea (完全座標一致) */}
                   <textarea
                     ref={editorRef}
                     value={editorText}
@@ -2967,13 +3105,16 @@ export default function GeneratorView(): React.JSX.Element {
                     }}
                     placeholder="Markdown を入力してください... [/] を入力すると Notion 風にブロック・書式を選択できます。"
                     spellCheck={false}
-                    className="pfpdf-editor-textarea relative z-10 w-full flex-1 p-3.5 font-mono text-xs leading-relaxed resize-none focus:outline-none placeholder:text-slate-300 overflow-y-auto whitespace-pre-wrap break-words bg-transparent"
+                    className="pfpdf-editor-textarea absolute inset-0 w-full h-full resize-none focus:outline-none placeholder:text-slate-300 bg-transparent"
                     style={{
-                      boxSizing: 'border-box',
-                      color: 'transparent',
+                      ...EDITOR_SHARED_STYLE,
+                      overflowY: 'scroll',
+                      overflowX: 'hidden',
+                      color: syntaxHighlightEnabled ? 'transparent' : '#0f172a',
                       caretColor: '#0f172a',
-                      lineHeight: '1.625',
-                      fontFamily: '"Noto Sans Mono", Consolas, "Courier New", monospace'
+                      cursor: 'text',
+                      userSelect: 'text',
+                      WebkitUserSelect: 'text'
                     }}
                   />
 
@@ -4601,10 +4742,37 @@ export default function GeneratorView(): React.JSX.Element {
               margin: 0 auto;
               display: block;
             }
-            /* VSCode風エディタのテキスト選択スタイル */
+            /* VSCode風エディタのテキスト選択＆スクロールバー完全同期 */
             textarea.pfpdf-editor-textarea::selection {
-              background-color: rgba(147, 197, 253, 0.45);
+              background-color: rgba(59, 130, 246, 0.35);
               color: transparent;
+            }
+            pre.pfpdf-editor-backdrop::-webkit-scrollbar,
+            textarea.pfpdf-editor-textarea::-webkit-scrollbar {
+              width: 10px;
+              height: 10px;
+            }
+            pre.pfpdf-editor-backdrop::-webkit-scrollbar-track,
+            textarea.pfpdf-editor-textarea::-webkit-scrollbar-track {
+              background: transparent;
+            }
+            pre.pfpdf-editor-backdrop::-webkit-scrollbar-thumb {
+              background: transparent;
+            }
+            textarea.pfpdf-editor-textarea::-webkit-scrollbar-thumb {
+              background: rgba(148, 163, 184, 0.4);
+              border-radius: 5px;
+            }
+            textarea.pfpdf-editor-textarea::-webkit-scrollbar-thumb:hover {
+              background: rgba(100, 116, 139, 0.7);
+            }
+            pre.pfpdf-editor-backdrop span {
+              font-weight: 400 !important;
+              font-style: normal !important;
+              padding: 0 !important;
+              margin: 0 !important;
+              border: none !important;
+              letter-spacing: 0px !important;
             }
           `}</style>
 

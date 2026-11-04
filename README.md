@@ -24,7 +24,7 @@ $ npm run dev
 
 ```bash
 # For ZIP
-npm run build:unpack
+$ npm run build:unpack
 
 # For windows
 $ npm run build:win
